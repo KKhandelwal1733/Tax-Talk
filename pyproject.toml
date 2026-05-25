@@ -5,7 +5,7 @@ description = "Production RAG over Indian GST + Income Tax rules"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "YOUR_NAME", email = "your.email@example.com" }]
+authors = [{ name = "Krishna Khandelwal", email = "khandelwal1733@gmail.com" }]
 
 dependencies = [
     # LLM providers
