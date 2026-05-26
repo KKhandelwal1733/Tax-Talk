@@ -2,7 +2,7 @@
 
 Production-grade retrieval-augmented generation over Indian GST and Income Tax statutes, notifications, circulars, and case law.
 
-**Status:** 🚧 In active development — see [project board](https://github.com/YOUR_USERNAME/domain-oracle-gst/projects).
+**Status:** 🚧 In active development — see [project board](https://github.com/YOUR_USERNAME/tax_talk-gst/projects).
 
 ## What this does
 
@@ -78,14 +78,14 @@ See [COSTS.md](./COSTS.md) for token-level cost breakdown and optimization choic
 
 ## Live demo
 
-[domain-oracle.yourname.me](https://domain-oracle.yourname.me) — coming after week 7.
+[tax_talk.yourname.me](https://tax_talk.yourname.me) — coming after week 7.
 
 ## Local development
 
 ```bash
 # Prerequisites: Python 3.11+, Docker, uv
-git clone https://github.com/YOUR_USERNAME/domain-oracle-gst
-cd domain-oracle-gst
+git clone https://github.com/YOUR_USERNAME/tax_talk-gst
+cd tax_talk-gst
 
 # Install dependencies
 uv sync

@@ -1,6 +1,6 @@
 """Smoke tests — these should always pass and break the build if they don't."""
 
-from tax_talk import settings
+from tax_talk.core.config import settings
 
 
 def test_config_loads() -> None:
