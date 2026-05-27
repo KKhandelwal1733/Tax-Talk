@@ -43,9 +43,11 @@ dependencies = [
     # Observability
     "langfuse>=2.55.0",
 
-    # Evals
-    "ragas>=0.2.0",
-    "datasets>=2.19.0",
+]
+
+evals = [
+    "ragas>=0.2.0",    # ← move here
+    "datasets>=2.19.0", # ← move here
 ]
 
 [project.optional-dependencies]

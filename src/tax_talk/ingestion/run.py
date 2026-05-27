@@ -50,12 +50,13 @@ def _should_run(stage: Stage, from_stage: Stage, to_stage: Stage) -> bool:
     return _stage_rank(from_stage) <= _stage_rank(stage) <= _stage_rank(to_stage)
 
 
-def _discover_source_keys(sources: list[str] | None) -> list[str]:
+def _discover_source_keys(sources: list[str] | None, data_type: str = "raw") -> list[str]:
     if sources:
         return sorted(set(sources))
-    if not DATA_RAW.exists():
+    data_dir = Path(__file__).parent.parent.parent.parent / "data" / data_type
+    if not data_dir.exists():
         return []
-    return sorted(d.name for d in DATA_RAW.iterdir() if d.is_dir())
+    return sorted(d.name for d in data_dir.iterdir() if d.is_dir())
 
 
 def _artifact_paths(source_key: str) -> tuple[Path, Path, Path]:
@@ -99,7 +100,7 @@ def run_ingestion(
     if _stage_rank(from_stage) > _stage_rank(to_stage):
         raise ValueError(f"Invalid stage range: from_stage={from_stage}, to_stage={to_stage}")
 
-    source_keys = _discover_source_keys(sources)
+    source_keys = _discover_source_keys(sources,"raw")
     if not source_keys:
         log.error("No source directories found in data/raw/. Run: uv run python scripts/download_corpus.py")
         sys.exit(1)
@@ -118,11 +119,14 @@ def run_ingestion(
     total_chunks = 0
     t_start = time.time()
 
-    for source_key in source_keys:
-        chunks_path, embeddings_path, manifest_path = _artifact_paths(source_key)
-        chunks_path.parent.mkdir(parents=True, exist_ok=True)
+    chunk_cache: dict[str, list[Chunk]] = {}
 
-        if _should_run("chunk", from_stage, to_stage):
+    # Pass 1: build and persist all chunks for selected sources before any embedding starts.
+    if _should_run("chunk", from_stage, to_stage):
+        for source_key in source_keys:
+            chunks_path, _, _ = _artifact_paths(source_key)
+            chunks_path.parent.mkdir(parents=True, exist_ok=True)
+
             docs = load_source(source_key)
             if not docs:
                 log.warning("Skipping %s: no documents loaded.", source_key)
@@ -134,7 +138,28 @@ def run_ingestion(
                 continue
 
             write_chunks_jsonl(chunks, chunks_path)
+            chunk_cache[source_key] = chunks
+            total_chunks += len(chunks)
             log.info("Wrote %d chunks to %s", len(chunks), chunks_path)
+
+    if _should_run("chunk", from_stage, to_stage):
+        active_source_keys = list(chunk_cache.keys())
+    else:
+        active_source_keys = _discover_source_keys(sources,"processed")
+        if not active_source_keys:
+            log.error("No processed source directories found in data/processed/. Run with --from-stage chunk to create them.")
+            sys.exit(1)
+
+    if not _should_run("embed", from_stage, to_stage) and not _should_run("upsert", from_stage, to_stage):
+        active_source_keys = []
+
+    # Pass 2: read chunks from processed artifacts, then embed and optionally upsert.
+    for source_key in active_source_keys:
+        chunks_path, embeddings_path, manifest_path = _artifact_paths(source_key)
+        chunks_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if source_key in chunk_cache:
+            chunks = chunk_cache[source_key]
         else:
             if not chunks_path.exists():
                 raise FileNotFoundError(
@@ -142,8 +167,7 @@ def run_ingestion(
                     f"Run from stage 'chunk' first."
                 )
             chunks = read_chunks_jsonl(chunks_path)
-
-        total_chunks += len(chunks)
+            total_chunks += len(chunks)
 
         if _should_run("embed", from_stage, to_stage):
             vectors: list[list[float]] = []
@@ -232,32 +256,6 @@ def run_ingestion(
     log.info("=" * 60)
 
 
-def test_retrieval() -> None:
-    from tax_talk.ingestion.embeddings import embed_query
-
-    store = QdrantStore()
-    total = store.count(exact=True)
-    if total == 0:
-        print("Collection is empty. Run ingestion first: make ingest")
-        return
-
-    print(f"\nCollection has {total} points. Testing retrieval...\n")
-
-    test_queries = [
-        "Is GST applicable on free samples given to distributors?",
-        "TDS rate for payment to non-resident professional",
-        "Section 80C deduction limit for FY 2025-26",
-    ]
-
-    for query in test_queries:
-        print(f"Query: {query}")
-        vec = embed_query(query)
-        results = store.search(vec, top_k=3)
-        for i, r in enumerate(results, 1):
-            print(f"  [{i}] score={r['score']:.3f} | {r['act_name']} | {r['applicable_period']}")
-            print(f"       {r['text'][:120].strip()}...")
-        print()
-
 
 if __name__ == "__main__":
     import argparse
@@ -275,5 +273,4 @@ if __name__ == "__main__":
         to_stage=args.to_stage,
     )
 
-    if args.test:
-        test_retrieval()
+

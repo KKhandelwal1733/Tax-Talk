@@ -148,7 +148,7 @@ def _clean_text(text: str) -> str:
     # Remove common PDF extraction artifacts from Indian govt docs
     text = re.sub(r"\x00+", "", text)    # null bytes
     text = re.sub(r"‍", "", text)        # zero-width joiner
-
+    text = re.sub(r"[\ud800-\udfff]", "", text) 
     return text.strip()
 
 
@@ -204,6 +204,7 @@ def chunk_text(
 def chunk_document(doc: SourceDocument) -> list[Chunk]:
     """Chunk a single SourceDocument into Chunk objects."""
     cleaned = _clean_text(doc.text)
+    cleaned = _strip_surrogate_codepoints(cleaned)
     raw_chunks = chunk_text(cleaned)
 
     chunks = []

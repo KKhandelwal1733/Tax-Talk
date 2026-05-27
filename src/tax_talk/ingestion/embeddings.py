@@ -119,7 +119,7 @@ def get_embedder() -> EmbeddingStrategy:
     return get_embedding_strategy()
 
 
-@observe(name="embed-texts")
+@observe(name="embed-texts",capture_input=False,capture_output=False)
 def embed_texts(texts: list[str]) -> list[list[float]]:
     """
     Convenience wrapper. Embeds texts using the configured provider.

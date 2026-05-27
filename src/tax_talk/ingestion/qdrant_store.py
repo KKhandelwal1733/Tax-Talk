@@ -87,7 +87,7 @@ class QdrantStore:
             return value.name.lower()
         return str(value).split(".")[-1].lower()
 
-    @observe(name="qdrant-upsert-chunks")
+    @observe(name="qdrant-upsert-chunks",capture_input=False)
     def upsert_chunks(
         self,
         chunks: list[Chunk],
@@ -127,7 +127,9 @@ class QdrantStore:
     def count(self, exact: bool = True) -> int:
         result = self._client.count(collection_name=self.collection, exact=exact)
         return result.count
-
+    
+    
+    @observe(name="qdrant-search")
     def search(
         self,
         query_vector: list[float],
