@@ -6,7 +6,6 @@ help:
 	@echo "  make infra-up     Start Qdrant (and Langfuse if uncommented)"
 	@echo "  make infra-down   Stop infrastructure containers"
 	@echo "  make ingest       Run ingestion pipeline (chunk + embed corpus)"
-	@echo "  make download-corpus  Download corpus sources into data/raw"
 	@echo "  make serve        Start FastAPI app on http://localhost:8000"
 	@echo "  make eval         Run RAGAS eval suite against golden dataset"
 	@echo "  make test         Run pytest"
@@ -24,9 +23,6 @@ infra-up:
 
 infra-down:
 	docker compose down
-
-download-corpus:
-	uv run python scripts/download_corpus.py
 
 ingest:
 	uv run python -m tax_talk.ingestion.run
