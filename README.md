@@ -1,8 +1,8 @@
-# Tax Talk: GST + Income Tax RAG
+# Domain Oracle: GST + Income Tax RAG
 
 Production-grade retrieval-augmented generation over Indian GST and Income Tax statutes, notifications, circulars, and case law.
 
-**Status:** 🚧 In active development — see [project board](https://github.com/YOUR_USERNAME/tax_talk-gst/projects).
+**Status:** 🚧 In active development — see [project board](https://github.com/YOUR_USERNAME/domain-oracle-gst/projects).
 
 ## What this does
 
@@ -39,26 +39,37 @@ Architecture diagram: see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 | Layer | Choice | Why |
 |---|---|---|
-| Embeddings | Azure OpenAI `text-embedding-3-large` | Best-in-class on legal/regulatory text; billed to Azure credit (no card needed) |
+| Embeddings | Local `BAAI/bge-base-en-v1.5` / Gemini `text-embedding-004` | No-card path; strong quality with portable setup |
 | Vector DB | Qdrant (self-hosted) | Open-source, supports binary quantization |
 | Sparse retrieval | BM25 (rank_bm25) | Catches exact section numbers and statute references |
 | Fusion | Reciprocal Rank Fusion | Robust combination of sparse + dense |
-| Reranker | Cohere Rerank v3 | Significant precision lift on hand-labeled set |
-| Generation | Azure OpenAI GPT-4o / Gemini 2.0 Flash | GPT-4o for high-stakes, Gemini for dev |
+| Reranker | Cohere Rerank v4 | Optional post-RRF semantic reranking |
+| Generation | Gemini 2.0 Flash / Groq Llama 3.3 70B | Fast, no-card friendly model strategy |
 | Orchestration | LangChain (retrieval) + Pydantic AI (generation) | Type-safe outputs |
 | Observability | Langfuse Cloud | Free tier, captures all traces and costs |
 | API | FastAPI + SSE streaming | Production-standard |
 | Eval framework | RAGAS + custom LLM-as-judge | Faithfulness, context relevance, citation accuracy |
 | Hosting | Azure VM (B1S, Central India) + Vercel frontend | Free via Azure for Students |
 
+### Embedding execution switch (sentence-transformers)
+
+When `EMBEDDING_PROVIDER=local`, you can choose where the same sentence-transformer model runs:
+
+- `EMBEDDING_LOCAL_MODE=local` (default): run on your machine.
+- `EMBEDDING_LOCAL_MODE=hf_inference`: run via Hugging Face hosted inference (requires `HF_TOKEN`).
+
+This lets you switch between local and hosted execution without changing ingestion code.
+
 ## Data sources (all official, public)
 
-- **GST**: CBIC notifications, circulars at [cbic.gov.in](https://www.cbic.gov.in/)
-- **Income Tax**: Acts and notifications at [incometax.gov.in](https://www.incometax.gov.in/)
-- **Acts**: CGST Act, IGST Act, UTGST Act, Income Tax Act 1961
-- **Case law**: Selected Supreme Court and High Court judgments from indiankanoon.org (sampled, attribution preserved)
+- **GST**: CGST/IGST/UTGST Acts 2017 + CGST Rules + CBIC notifications + circulars, all from [cbic-gst.gov.in/gst-acts.html](https://cbic-gst.gov.in/gst-acts.html) and [gstcouncil.gov.in](https://gstcouncil.gov.in/cgst-circulars). No statutory replacement — 2017 framework still in force.
+- **Income Tax (current)**: **Income-tax Act, 2025** (Act 30 of 2025) — effective April 1, 2026, repealed the 1961 Act. 536 sections across 23 chapters. Source: [incometaxindia.gov.in](https://incometaxindia.gov.in/Pages/income-tax-bill-2025.aspx).
+- **Income Tax (legacy)**: **Income-tax Act, 1961** as amended by Finance Act 2026 — still applies to FY 2025-26 (AY 2026-27) returns being filed in July 2026, and to all open assessments/appeals for prior years.
+- **Cross-reference**: [indiacode.nic.in](https://www.indiacode.nic.in/) for tie-breaking, [egazette.gov.in](https://egazette.gov.in/) for Finance Act and gazette notifications.
 
-Corpus license/copyright: All statutes are public domain. Notifications and circulars are government-issued public documents. Case law citations preserved with original source links.
+> **Transition handling is a project differentiator.** Every chunk in the index is tagged with `applicable_period` ("FY 2026-27 onwards" for 2025 Act, "AY 2026-27 and earlier" for 1961 Act). The retriever can filter by the period the user's question concerns. Naive RAG implementations don't handle this — they conflate the two Acts and produce wrong answers.
+
+Corpus license/copyright: All statutes are public domain. Notifications and circulars are government-issued public documents. Case law citations preserve original source links.
 
 ## Evals
 
@@ -78,14 +89,14 @@ See [COSTS.md](./COSTS.md) for token-level cost breakdown and optimization choic
 
 ## Live demo
 
-[tax_talk.yourname.me](https://tax_talk.yourname.me) — coming after week 7.
+[domain-oracle.yourname.me](https://domain-oracle.yourname.me) — coming after week 7.
 
 ## Local development
 
 ```bash
 # Prerequisites: Python 3.11+, Docker, uv
-git clone https://github.com/YOUR_USERNAME/tax_talk-gst
-cd tax_talk-gst
+git clone https://github.com/YOUR_USERNAME/domain-oracle-gst
+cd domain-oracle-gst
 
 # Install dependencies
 uv sync
@@ -95,7 +106,7 @@ docker compose up -d
 
 # Copy env and add your API keys
 cp .env.example .env
-# Edit .env: add OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, COHERE_API_KEY, LANGFUSE_*
+# Edit .env: add ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, COHERE_API_KEY, LANGFUSE_*
 
 # Run ingestion (chunks + embeds the corpus)
 make ingest
@@ -105,6 +116,81 @@ make serve
 
 # Run evals
 make eval
+```
+
+### API endpoints
+
+- `GET /health`: liveness check.
+- `POST /retrieve`: hybrid retrieval (dense + BM25 + RRF) with optional Cohere rerank and metadata filters.
+
+Example request:
+
+```bash
+curl -X POST http://localhost:8000/retrieve \
+    -H "content-type: application/json" \
+    -d '{
+        "query": "section 54F exemption",
+        "top_k": 5,
+        "dense_top_k": 20,
+        "bm25_top_k": 20,
+        "filters": {"act_status": "current"}
+    }'
+```
+
+### Observability for retrieval
+
+Retrieval spans are instrumented with Langfuse `@observe` decorators:
+
+- `api-retrieve`
+- `retrieval-hybrid`
+- `retrieval-dense-search`
+- `retrieval-bm25-search`
+- `retrieval-bm25-load-index`
+- `retrieval-rrf-fusion`
+- `retrieval-cohere-rerank`
+
+### Optional Cohere rerank settings
+
+Rerank runs after RRF and is enabled by default when a Cohere API key is configured.
+
+- `RERANK_ENABLED` (default `true`)
+- `RERANK_MODEL` (default `rerank-v4.0-pro`)
+- `RERANK_TOP_K` (default `30`) candidate pool size sent to reranker
+- `RERANK_TOP_N` (default `10`) number of reranked items returned from Cohere
+- `RERANK_MAX_TOKENS_PER_DOC` (default `4096`)
+
+Fail-open behavior: if Cohere is not configured or rerank fails, retrieval returns the fused RRF ranking.
+
+### Processed-stage ingestion (resumable)
+
+Ingestion now persists intermediate artifacts per source under `data/processed/<source_key>/`:
+
+- `chunks.jsonl`
+- `embeddings.npy`
+- `manifest.json`
+
+Run full processed flow:
+
+```bash
+uv run python -m tax_talk.ingestion.run --from-stage chunk --to-stage upsert
+```
+
+Resume from embedding stage (reuse existing chunks):
+
+```bash
+uv run python -m tax_talk.ingestion.run --from-stage embed --to-stage upsert
+```
+
+Run upsert only (reuse cached chunks + embeddings):
+
+```bash
+uv run python -m tax_talk.ingestion.run --from-stage upsert --to-stage upsert
+```
+
+Limit to selected sources:
+
+```bash
+uv run python -m tax_talk.ingestion.run --sources it_act_2025_icai gst_circulars_cbic
 ```
 
 ## Roadmap

@@ -11,6 +11,6 @@ def test_config_loads() -> None:
 
 def test_imports() -> None:
     """All submodules should be importable."""
-    import tax_talk as tax_talk  # noqa: F401
-    import tax_talk.api.main  # noqa: F401
+    import tax_talk as tax_talk
+    import tax_talk.api.main
     import tax_talk.ingestion.run  # noqa: F401

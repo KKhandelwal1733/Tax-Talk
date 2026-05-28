@@ -12,9 +12,7 @@ from tax_talk.ingestion.embeddings import embed_query as embed_query
 from tax_talk.ingestion.qdrant_store import QdrantStore
 from tax_talk.retrieval.bm25_index import Bm25Searcher
 from tax_talk.retrieval.dense_search import run_dense_search
-from tax_talk.retrieval.helpers.filters import payload_matches_filters
 from tax_talk.retrieval.helpers.fusion import reciprocal_rank_fusion
-from tax_talk.retrieval.helpers.tokenization import tokenize
 from tax_talk.retrieval.rerank import cohere_rerank_candidates
 
 log = get_logger(__name__)
@@ -169,13 +167,3 @@ class HybridRetriever:
             rrf_k=self._rrf_k,
             top_k=top_k,
         )
-
-
-def _tokenize(text: str) -> list[str]:
-    """Backward-compatible tokenization helper for existing tests/imports."""
-    return tokenize(text)
-
-
-def _payload_matches_filters(payload: dict[str, Any], filters: dict[str, Any]) -> bool:
-    """Backward-compatible filter helper for existing tests/imports."""
-    return payload_matches_filters(payload, filters)

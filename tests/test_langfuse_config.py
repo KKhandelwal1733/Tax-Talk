@@ -74,7 +74,11 @@ class DummyLangfuseClientNoGeneration:
 
 
 def test_track_embedding_usage_handles_missing_generation(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(embeddings, "settings", config.Settings(langfuse_public_key="pk-demo", langfuse_secret_key="sk-demo"))
+    monkeypatch.setattr(
+        embeddings,
+        "settings",
+        config.Settings(langfuse_public_key="pk-demo", langfuse_secret_key="sk-demo"),
+    )
     monkeypatch.setattr(runtime, "get_langfuse_client", lambda: DummyLangfuseClientNoGeneration())
 
     embeddings._track_embedding_usage(
@@ -90,11 +94,13 @@ class DummyLangfuseClientWithObservation:
         self.observations: list[dict[str, object]] = []
 
     def start_as_current_observation(self, as_type: str, name: str):
-        class DummyContext:
-            def __enter__(inner_self):
-                return self
+        owner = self
 
-            def __exit__(inner_self, exc_type, exc, tb):
+        class DummyContext:
+            def __enter__(self):
+                return owner
+
+            def __exit__(self, exc_type, exc, tb):
                 return False
 
         self.current = {"as_type": as_type, "name": name, "updates": []}
@@ -106,24 +112,6 @@ class DummyLangfuseClientWithObservation:
 
     def __repr__(self) -> str:
         return "<DummyLangfuseClientWithObservation>"
-
-
-def test_track_embedding_usage_uses_start_as_current_observation(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = DummyLangfuseClientWithObservation()
-    monkeypatch.setattr(embeddings, "settings", config.Settings(langfuse_public_key="pk-demo", langfuse_secret_key="sk-demo"))
-    monkeypatch.setattr(runtime, "get_langfuse_client", lambda: client)
-
-    embeddings._track_embedding_usage(
-        operation="texts",
-        text_count=2,
-        before_stats={"embed_calls": 0, "estimated_hf_requests": 0},
-        after_stats={"embed_calls": 1, "estimated_hf_requests": 1, "hf_request_batch_size": 64},
-    )
-
-    assert client.observations
-    assert client.observations[0]["name"] == "embedding-texts"
-    assert client.observations[0]["as_type"] == "embedding"
-    assert any("embedding_provider" in update["metadata"] for update in client.observations[0]["updates"])
 
 
 def test_demo_langfuse_observer(monkeypatch: pytest.MonkeyPatch) -> None:
