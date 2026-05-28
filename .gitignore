@@ -72,7 +72,6 @@ data/processed/*
 # Models / embeddings cache
 .cache/
 .huggingface/
-models/
 embeddings/
 
 # Logs
