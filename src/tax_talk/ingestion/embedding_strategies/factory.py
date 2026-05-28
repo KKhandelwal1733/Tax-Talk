@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from threading import Lock
-from typing import Callable
 
 from tax_talk.core.config import settings
 from tax_talk.core.runtime import get_logger
 from tax_talk.ingestion.embedding_strategies.embedding_strategy import EmbeddingStrategy
 from tax_talk.ingestion.embedding_strategies.gemini import GeminiEmbeddingStrategy
 from tax_talk.ingestion.embedding_strategies.sentence_transformer import LocalEmbeddingStrategy
+
 # from tax_talk.ingestion.embedding_strategies.voyage import VoyageEmbeddingStrategy
 
 log = get_logger(__name__)
@@ -28,8 +29,8 @@ class StrategySpec:
 
 
 _STRATEGY_SPECS: dict[str, StrategySpec] = {
-    "local": StrategySpec(
-        display_name="local sentence-transformers",
+    "sentence_transformer": StrategySpec(
+        display_name="sentence-transformers",
         factory=LocalEmbeddingStrategy,
         model_setting_attr="embedding_model_local",
     ),
@@ -40,13 +41,13 @@ _STRATEGY_SPECS: dict[str, StrategySpec] = {
         required_key_attr="gemini_api_key",
         required_key_env_name="GEMINI_API_KEY",
     ),
-#     "voyage": StrategySpec(
-#         display_name="Voyage AI",
-#         factory=VoyageEmbeddingStrategy,
-#         model_setting_attr="embedding_model_voyage",
-#         required_key_attr="voyage_api_key",
-#         required_key_env_name="VOYAGE_API_KEY",
-#     ),
+    #     "voyage": StrategySpec(
+    #         display_name="Voyage AI",
+    #         factory=VoyageEmbeddingStrategy,
+    #         model_setting_attr="embedding_model_voyage",
+    #         required_key_attr="voyage_api_key",
+    #         required_key_env_name="VOYAGE_API_KEY",
+    #     ),
 }
 
 _strategy_lock = Lock()
@@ -58,7 +59,7 @@ def _get_strategy_spec(provider: str) -> StrategySpec:
     if spec is None:
         raise ValueError(
             f"Unknown EMBEDDING_PROVIDER: '{provider}'. "
-            "Choose: " + " | ".join(sorted(_STRATEGY_SPECS.keys()))
+            "Choose: sentence_transformer | gemini | voyage"
         )
     return spec
 
