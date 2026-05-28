@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to **domain-oracle** are documented here.
+All notable changes to **tax-talk** are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) + custom analysis.
 
 ## Change Summary

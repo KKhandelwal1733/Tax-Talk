@@ -14,7 +14,7 @@ from tax_talk.retrieval import HybridRetriever
 log = get_logger(__name__)
 
 
-app = FastAPI(title="domain-oracle API", version="0.1.0")
+app = FastAPI(title="tax-talk API", version="0.1.0")
 
 
 @lru_cache(maxsize=1)

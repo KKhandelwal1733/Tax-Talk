@@ -1,8 +1,8 @@
-# Domain Oracle: GST + Income Tax RAG
+# TAX TALK: GST + Income Tax RAG
 
 Production-grade retrieval-augmented generation over Indian GST and Income Tax statutes, notifications, circulars, and case law.
 
-**Status:** 🚧 In active development — see [project board](https://github.com/YOUR_USERNAME/domain-oracle-gst/projects).
+**Status:** 🚧 In active development — see [project board](https://github.com/KKhandelwal1733/Tax-Talk.git).
 
 ## What this does
 
@@ -95,8 +95,8 @@ See [COSTS.md](./COSTS.md) for token-level cost breakdown and optimization choic
 
 ```bash
 # Prerequisites: Python 3.11+, Docker, uv
-git clone https://github.com/YOUR_USERNAME/domain-oracle-gst
-cd domain-oracle-gst
+git clone https://github.com/KKhandelwal1733/Tax-Talk.git
+cd tax-talk
 
 # Install dependencies
 uv sync
