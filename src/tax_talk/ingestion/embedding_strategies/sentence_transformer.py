@@ -14,6 +14,7 @@ from tax_talk.ingestion.embedding_strategies.embedding_strategy import Embedding
 def _sanitize_text(text: str) -> str:
     return text.encode("utf-8", "replace").decode("utf-8").replace("\ufffd", " ")
 
+
 log = get_logger(__name__)
 
 
@@ -31,7 +32,9 @@ class LocalEmbeddingStrategy(EmbeddingStrategy):
             from huggingface_hub import InferenceClient  # lazy import
 
             if not settings.hf_token:
-                raise ValueError("HF_TOKEN not set in .env - required for EMBEDDING_LOCAL_MODE=hf_inference.")
+                raise ValueError(
+                    "HF_TOKEN not set in .env - required for EMBEDDING_LOCAL_MODE=hf_inference."
+                )
 
             log.info("Using HF Inference API for embedding model: %s", model_name)
             self._client = InferenceClient(token=settings.hf_token)

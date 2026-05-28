@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pypdf
 from bs4 import BeautifulSoup
+
 from tax_talk.core.runtime import get_logger
 
 log = get_logger(__name__)
@@ -30,6 +31,7 @@ DATA_RAW = Path(__file__).parent.parent.parent.parent / "data" / "raw"
 @dataclass
 class SourceDocument:
     """One PDF file worth of text + all its metadata."""
+
     source_key: str
     file_path: Path
     text: str
@@ -106,7 +108,11 @@ def load_source(source_key: str) -> list[SourceDocument]:
         return []
 
     supported_files = sorted(
-        [p for p in source_dir.iterdir() if p.is_file() and p.suffix.lower() in {".pdf", ".html", ".htm"}]
+        [
+            p
+            for p in source_dir.iterdir()
+            if p.is_file() and p.suffix.lower() in {".pdf", ".html", ".htm"}
+        ]
     )
     if not supported_files:
         log.warning("No PDF/HTML files in %s", source_dir)
@@ -120,12 +126,14 @@ def load_source(source_key: str) -> list[SourceDocument]:
             text = load_html(source_path)
         if not text:
             continue
-        docs.append(SourceDocument(
-            source_key=source_key,
-            file_path=source_path,
-            text=text,
-            metadata={**metadata, "filename": source_path.name},
-        ))
+        docs.append(
+            SourceDocument(
+                source_key=source_key,
+                file_path=source_path,
+                text=text,
+                metadata={**metadata, "filename": source_path.name},
+            )
+        )
 
     log.info("Loaded %d document(s) from %s", len(docs), source_key)
     return docs
@@ -161,4 +169,6 @@ def load_all_sources(sources: list[str] | None = None) -> list[SourceDocument]:
 if __name__ == "__main__":
     docs = load_all_sources()
     for doc in docs:
-        print(f"  {doc.source_key} | {doc.act_name} | {len(doc.text):,} chars | period: {doc.applicable_period}")
+        print(
+            f"  {doc.source_key} | {doc.act_name} | {len(doc.text):,} chars | period: {doc.applicable_period}"
+        )

@@ -20,31 +20,15 @@ import json
 from pathlib import Path
 from typing import Any
 
-from langfuse import observe
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
+from langfuse import observe
 
 from tax_talk.core.config import settings
 from tax_talk.core.runtime import get_logger
 from tax_talk.ingestion.embedding_strategies import EmbeddingStrategy, get_embedding_strategy
+from tax_talk.models.ingestion import EmbeddingManifest
 
 log = get_logger(__name__)
-
-
-class EmbeddingManifest(BaseModel):
-    """Validated metadata for persisted embedding artifacts."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    source_key: str = Field(min_length=1)
-    chunk_count: int = Field(ge=0)
-    embedding_rows: int = Field(ge=0)
-    embedding_dimensions: int = Field(ge=0)
-    embedding_provider: str = Field(min_length=1)
-    embedding_model: str = Field(min_length=1)
-    embedding_batch_size: int = Field(ge=1)
-    ingest_batch_size: int = Field(ge=1)
-    generated_at_unix: float = Field(ge=0)
 
 
 def _is_langfuse_enabled() -> bool:
@@ -58,7 +42,16 @@ def _int_stat(stats: dict[str, int], key: str) -> int:
 
 def _sanitize_text(text: str) -> str:
     """Replace invalid Unicode surrogates so embedding payloads are JSON-safe."""
-    return text.encode("utf-8", "replace").decode("utf-8").replace("\ufffd", " ")
+    result = []
+    for char in text:
+        try:
+            # Valid UTF-8 encodable characters pass through
+            char.encode("utf-8")
+            result.append(char)
+        except UnicodeEncodeError:
+            # Unencod able characters (like surrogates) become spaces
+            result.append(" ")
+    return "".join(result)
 
 
 def _normalize_embedding_inputs(texts: list[object]) -> list[str]:
@@ -99,14 +92,6 @@ def _track_embedding_usage(
     if not _is_langfuse_enabled():
         return
 
-    provider = settings.embedding_provider.lower().strip()
-    model_by_provider = {
-        "local": settings.embedding_model_local,
-        "gemini": settings.embedding_model_gemini,
-        "voyage": settings.embedding_model_voyage,
-    }
-    model_name = model_by_provider.get(provider, "unknown")
-
     # Langfuse embedding tracing removed.
     return
 
@@ -119,7 +104,7 @@ def get_embedder() -> EmbeddingStrategy:
     return get_embedding_strategy()
 
 
-@observe(name="embed-texts",capture_input=False,capture_output=False)
+@observe(name="embed-texts", as_type="embedding", capture_input=False, capture_output=False)
 def embed_texts(texts: list[str]) -> list[list[float]]:
     """
     Convenience wrapper. Embeds texts using the configured provider.
@@ -146,6 +131,7 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     return vectors
 
 
+@observe(name="embed-query", as_type="embedding", capture_input=False, capture_output=False)
 def embed_query(query: str) -> list[float]:
     """
     Embed a single query string at retrieval time.
@@ -189,9 +175,15 @@ def read_embeddings_npy(input_path: Path) -> list[list[float]]:
     return array.tolist()
 
 
-def write_embedding_manifest(manifest_path: Path, payload: EmbeddingManifest | dict[str, Any]) -> None:
+def write_embedding_manifest(
+    manifest_path: Path, payload: EmbeddingManifest | dict[str, Any]
+) -> None:
     """Write embedding metadata used for stage validation and resume."""
-    manifest = payload if isinstance(payload, EmbeddingManifest) else EmbeddingManifest.model_validate(payload)
+    manifest = (
+        payload
+        if isinstance(payload, EmbeddingManifest)
+        else EmbeddingManifest.model_validate(payload)
+    )
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(
         json.dumps(manifest.model_dump(), indent=2, sort_keys=True),

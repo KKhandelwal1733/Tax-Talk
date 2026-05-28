@@ -18,14 +18,12 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from tax_talk.ingestion.loader import SourceDocument
 from tax_talk.core.runtime import get_logger
+from tax_talk.ingestion.loader import SourceDocument
+from tax_talk.models.ingestion import ChunkRecord
 
 log = get_logger(__name__)
 
@@ -33,8 +31,8 @@ log = get_logger(__name__)
 # ~4 chars per token is a rough average for English legal text.
 # 512 tokens × 4 chars = ~2,048 chars per chunk.
 # Overlap helps retrieve answers that straddle a boundary.
-CHUNK_SIZE_CHARS = 2_000      # ≈ 512 tokens
-CHUNK_OVERLAP_CHARS = 200     # ≈ 50 token overlap
+CHUNK_SIZE_CHARS = 2_000  # ≈ 512 tokens
+CHUNK_OVERLAP_CHARS = 200  # ≈ 50 token overlap
 
 
 def _strip_surrogate_codepoints(value: str) -> str:
@@ -48,14 +46,15 @@ class Chunk:
     A single chunk ready for embedding and Qdrant upsert.
     chunk_id is deterministic: sha256(source_key + text).
     """
+
     chunk_id: str
     text: str
     source_key: str
     filename: str
     # Metadata fields — all searchable in Qdrant payload
     applicable_period: str = "unknown"  # "FY 2026-27 onwards" | "AY 2026-27 and earlier" | "all"
-    act_status: str = "unknown"         # "current" | "legacy"
-    doc_type: str = "act"               # "act" | "rules" | "notification" | "circular"
+    act_status: str = "unknown"  # "current" | "legacy"
+    doc_type: str = "act"  # "act" | "rules" | "notification" | "circular"
     act_name: str = ""
     # Optional structural fields (fill in during week 4 contextual chunking)
     chapter: str = ""
@@ -90,40 +89,6 @@ class Chunk:
         }
 
 
-class ChunkRecord(BaseModel):
-    """Validated on-disk representation for chunk JSONL artifacts."""
-
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
-
-    chunk_id: str = Field(min_length=1)
-    text: str
-    source_key: str = Field(min_length=1)
-    filename: str = ""
-    applicable_period: str = "unknown"
-    act_status: str = "unknown"
-    doc_type: Literal["act", "rules", "notification", "circular"] | str = "act"
-    act_name: str = ""
-    chapter: str = ""
-    section_number_new: str = ""
-    section_number_old: str = ""
-    section_title: str = ""
-    chunk_index: int = Field(ge=0)
-    total_chunks: int = Field(ge=0)
-    char_start: int = Field(ge=0)
-    char_end: int = Field(ge=0)
-
-    def to_chunk(self) -> Chunk:
-        return Chunk(**self.model_dump())
-
-    @classmethod
-    def from_chunk(cls, chunk: Chunk) -> "ChunkRecord":
-        payload = asdict(chunk)
-        for key, value in payload.items():
-            if isinstance(value, str):
-                payload[key] = _strip_surrogate_codepoints(value)
-        return cls.model_validate(payload)
-
-
 def _make_chunk_id(source_key: str, text: str, chunk_index: int) -> str:
     """Deterministic chunk ID — same input always produces same ID."""
     raw = f"{source_key}::{chunk_index}::{text[:100]}"
@@ -139,16 +104,16 @@ def _clean_text(text: str) -> str:
     """
     # Normalize whitespace
     text = re.sub(r"\r\n", "\n", text)
-    text = re.sub(r"\n{4,}", "\n\n\n", text)    # max 3 consecutive newlines
-    text = re.sub(r" {2,}", " ", text)           # max 1 space
+    text = re.sub(r"\n{4,}", "\n\n\n", text)  # max 3 consecutive newlines
+    text = re.sub(r" {2,}", " ", text)  # max 1 space
 
     # Remove standalone page numbers (e.g. "42", "  42  " on its own line)
     text = re.sub(r"^\s*\d{1,4}\s*$", "", text, flags=re.MULTILINE)
 
     # Remove common PDF extraction artifacts from Indian govt docs
-    text = re.sub(r"\x00+", "", text)    # null bytes
-    text = re.sub(r"‍", "", text)        # zero-width joiner
-    text = re.sub(r"[\ud800-\udfff]", "", text) 
+    text = re.sub(r"\x00+", "", text)  # null bytes
+    text = re.sub(r"‍", "", text)  # zero-width joiner
+    text = re.sub(r"[\ud800-\udfff]", "", text)
     return text.strip()
 
 
@@ -210,20 +175,22 @@ def chunk_document(doc: SourceDocument) -> list[Chunk]:
     chunks = []
     for i, (text, char_start, char_end) in enumerate(raw_chunks):
         chunk_id = _make_chunk_id(doc.source_key, text, i)
-        chunks.append(Chunk(
-            chunk_id=chunk_id,
-            text=text,
-            source_key=doc.source_key,
-            filename=doc.metadata.get("filename", ""),
-            applicable_period=doc.metadata.get("applicable_period", "unknown"),
-            act_status=doc.metadata.get("act_status", "unknown"),
-            doc_type=doc.metadata.get("doc_type", "act"),
-            act_name=doc.metadata.get("act_name", ""),
-            chunk_index=i,
-            total_chunks=len(raw_chunks),
-            char_start=char_start,
-            char_end=char_end,
-        ))
+        chunks.append(
+            Chunk(
+                chunk_id=chunk_id,
+                text=text,
+                source_key=doc.source_key,
+                filename=doc.metadata.get("filename", ""),
+                applicable_period=doc.metadata.get("applicable_period", "unknown"),
+                act_status=doc.metadata.get("act_status", "unknown"),
+                doc_type=doc.metadata.get("doc_type", "act"),
+                act_name=doc.metadata.get("act_name", ""),
+                chunk_index=i,
+                total_chunks=len(raw_chunks),
+                char_start=char_start,
+                char_end=char_end,
+            )
+        )
 
     log.info(
         "Chunked %s (%s) → %d chunks",
@@ -270,6 +237,7 @@ def read_chunks_jsonl(input_path: Path) -> list[Chunk]:
 
 if __name__ == "__main__":
     from tax_talk.ingestion.loader import load_all_sources
+
     docs = load_all_sources()
     chunks = chunk_documents(docs)
     print(f"\nTotal chunks: {len(chunks)}")
