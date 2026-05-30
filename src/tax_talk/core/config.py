@@ -50,6 +50,23 @@ class Settings(BaseSettings):
     rerank_top_n: int = 10
     rerank_max_tokens_per_doc: int = 4096
 
+    # === Contextual chunk summaries ===
+    contextual_summary_enabled: bool = True
+    contextual_summary_metadata_min_chars: int = 400
+    contextual_summary_max_chars: int = 600
+    contextual_summary_prefix_label: str = "Context"
+    contextual_summary_llm_fallback_enabled: bool = True
+    contextual_summary_fallback_provider: str = "gemini"
+    contextual_summary_fallback_model: str = "gemini-3.1-flash-lite"
+    contextual_summary_document_prefix_chars: int = 12_000
+
+    # === Chunking strategies for ingestion experiments ===
+    chunking_strategy: str = "contextual"  # fixed | semantic | contextual
+    chunk_size_chars: int = 2_000
+    chunk_overlap_chars: int = 200
+    semantic_chunk_min_chars: int = 900
+    semantic_chunk_max_chars: int = 2_400
+
     # === Observability ===
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
@@ -59,6 +76,13 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://127.0.0.1:6333"
     qdrant_api_key: str = ""
     qdrant_collection: str = "gst_income_tax"
+
+    # === Eval runner defaults ===
+    eval_provider: str = "gemini"
+    eval_model: str = "gemini-2.0-flash"
+    eval_top_k: int = 8
+    eval_dataset_path: str = "data/eval/golden_qa_v0_30.jsonl"
+    eval_results_dir: str = "data/eval/results"
 
     # === Postgres ===
     database_url: str = ""
@@ -70,7 +94,7 @@ class Settings(BaseSettings):
     # === Model selection (3-tier strategy, no-card path) ===
     dev_model: str = "gemini-2.0-flash"
     speed_model: str = "groq/llama-3.3-70b-versatile"
-    eval_model: str = "gemini-2.0-flash"
+    eval_judge_model: str = "gemini-2.0-flash"
 
     # === Cost controls (set on day one, never bypass) ===
     max_cost_per_request_usd: float = 0.10
