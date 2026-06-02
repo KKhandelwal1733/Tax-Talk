@@ -89,3 +89,4 @@ langfuse_data/
 postgres_data/
 .env.example
 help.py
+langfuse/*

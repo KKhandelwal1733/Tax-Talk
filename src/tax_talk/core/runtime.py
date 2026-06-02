@@ -205,7 +205,7 @@ def get_groq_client() -> Any:
 def get_llm_strategy(provider: str | None = None) -> LLMStrategy:
     """Return a runtime-owned singleton strategy for the requested provider."""
     log = get_logger(__name__)
-    configured_provider = (provider or settings.contextual_summary_fallback_provider or "").strip()
+    configured_provider = (provider or "").strip()
     provider_key = configured_provider.lower()
 
     if not provider_key:

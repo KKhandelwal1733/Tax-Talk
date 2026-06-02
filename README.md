@@ -1,8 +1,8 @@
-# TAX TALK: GST + Income Tax RAG
+# Domain Oracle: GST + Income Tax RAG
 
 Production-grade retrieval-augmented generation over Indian GST and Income Tax statutes, notifications, circulars, and case law.
 
-**Status:** 🚧 In active development — see [project board](https://github.com/KKhandelwal1733/Tax-Talk.git).
+**Status:** 🚧 In active development — see [project board](https://github.com/YOUR_USERNAME/domain-oracle-gst/projects).
 
 ## What this does
 
@@ -95,8 +95,8 @@ See [COSTS.md](./COSTS.md) for token-level cost breakdown and optimization choic
 
 ```bash
 # Prerequisites: Python 3.11+, Docker, uv
-git clone https://github.com/KKhandelwal1733/Tax-Talk.git
-cd tax-talk
+git clone https://github.com/YOUR_USERNAME/domain-oracle-gst
+cd domain-oracle-gst
 
 # Install dependencies
 uv sync
@@ -106,7 +106,7 @@ docker compose up -d
 
 # Copy env and add your API keys
 cp .env.example .env
-# Edit .env: add ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, COHERE_API_KEY, LANGFUSE_*
+# Edit .env: add GEMINI_API_KEY, GROQ_API_KEY, COHERE_API_KEY, LANGFUSE_*
 
 # Run ingestion (chunks + embeds the corpus)
 make ingest
@@ -163,11 +163,30 @@ Fail-open behavior: if Cohere is not configured or rerank fails, retrieval retur
 
 ### Processed-stage ingestion (resumable)
 
-Ingestion now persists intermediate artifacts per source under `data/processed/<source_key>/`:
+Ingestion now persists intermediate artifacts under a hard strategy-scoped layout:
+
+- `data/processed/<chunking_strategy>/<source_key>/`
+
+Examples:
+
+- `data/processed/fixed/gst_circulars_cbic/chunks.jsonl`
+- `data/processed/semantic/it_act_2025_icai/embeddings.npy`
+- `data/processed/contextual/igst_act_2025/manifest.json`
+
+Each source folder contains:
 
 - `chunks.jsonl`
 - `embeddings.npy`
 - `manifest.json`
+
+Legacy `data/processed/<source_key>/` paths are not used.
+
+Chunk generation now also:
+
+- maps nested raw metadata correctly from `ingestion_metadata` and `chunk_metadata`
+- prepends contextual source summaries to chunk text when available
+- prefers curated `source_meta` first and optionally falls back to an LLM summary over a truncated document prefix
+- persists the applied contextual summary and its provenance in chunk artifacts for auditability
 
 Run full processed flow:
 
@@ -192,6 +211,83 @@ Limit to selected sources:
 ```bash
 uv run python -m tax_talk.ingestion.run --sources it_act_2025_icai gst_circulars_cbic
 ```
+
+Run strategy-specific ingestion into separate collections:
+
+```bash
+uv run python -m tax_talk.ingestion.run --chunking-strategy fixed --collection gst_income_tax_fixed
+uv run python -m tax_talk.ingestion.run --chunking-strategy semantic --collection gst_income_tax_semantic
+uv run python -m tax_talk.ingestion.run --chunking-strategy contextual --collection gst_income_tax_contextual
+```
+
+Supported chunking strategies:
+
+- `fixed` — fixed-size chunks with overlap
+- `semantic` — heading/section-aware paragraph grouping
+- `contextual` — fixed chunks with metadata-first contextual summary prefixing
+
+### HF inference parallel ingestion knobs
+
+When `EMBEDDING_LOCAL_MODE=hf_inference`, embed/upsert phases can run with bounded source-level concurrency.
+
+- `INGESTION_MAX_WORKERS` (default `2`) source worker threads
+- `HF_MAX_PARALLEL_SOURCES` (default `2`) hard cap for source workers in HF mode
+- `HF_MAX_CONCURRENT_REQUESTS` (default `2`) concurrent HF requests across workers
+- `HF_RETRY_MAX_ATTEMPTS` (default `5`) retries for 429/5xx
+- `HF_RETRY_INITIAL_DELAY_SECONDS` (default `1.0`) exponential backoff base
+- `HF_RETRY_MAX_DELAY_SECONDS` (default `12.0`) backoff ceiling
+
+### Contextual chunking settings
+
+Contextual summaries are applied at ingestion time and reused for all chunks from a source document.
+
+- `CONTEXTUAL_SUMMARY_ENABLED` (default `true`)
+- `CONTEXTUAL_SUMMARY_METADATA_MIN_CHARS` (default `120`)
+- `CONTEXTUAL_SUMMARY_MAX_CHARS` (default `600`)
+- `CONTEXTUAL_SUMMARY_PREFIX_LABEL` (default `Context`)
+- `CONTEXTUAL_SUMMARY_LLM_FALLBACK_ENABLED` (default `false`)
+- `CONTEXTUAL_SUMMARY_FALLBACK_PROVIDER` (default `gemini`, supported: `gemini`, `groq`)
+- `CONTEXTUAL_SUMMARY_FALLBACK_MODEL` (default `gemini-2.0-flash`)
+- `CONTEXTUAL_SUMMARY_DOCUMENT_PREFIX_CHARS` (default `12000`)
+
+Provider runtime details:
+
+- LLM fallback uses runtime-owned singleton strategies for Gemini and Groq.
+- Groq integration uses the native Python SDK client pattern (`from groq import Groq`) and calls `client.chat.completions.create(...)`.
+- If provider setup is invalid or unavailable, fallback is fail-open and ingestion continues with plain chunk text.
+
+Behavior:
+
+- use `source_meta` first when it is informative enough
+- if metadata is weak and fallback is enabled, generate one short summary per document from a truncated document prefix
+- if fallback is disabled or fails, ingestion continues with plain chunk text
+
+### Offline evals with per-strategy collections
+
+Golden dataset (30 hand-built pairs): `data/eval/golden_qa_v0_30.jsonl`
+
+Run one strategy eval:
+
+```bash
+uv run python -m tax_talk.evals.run --collection gst_income_tax_fixed --chunking-strategy fixed
+```
+
+Compare all three:
+
+```bash
+uv run python -m tax_talk.evals.run --collection gst_income_tax_fixed --chunking-strategy fixed
+uv run python -m tax_talk.evals.run --collection gst_income_tax_semantic --chunking-strategy semantic
+uv run python -m tax_talk.evals.run --collection gst_income_tax_contextual --chunking-strategy contextual
+```
+
+Metrics computed via RAGAS:
+
+- faithfulness
+- context precision
+- context recall
+- answer relevancy
+
+Each run writes local artifacts under `data/eval/results/` and emits Langfuse traces for eval orchestration and sample-level generation.
 
 ## Roadmap
 

@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     )
 
     # === LLM API keys (no-card path) ===
-    anthropic_api_key: str = Field(default="", description="Claude API key — $5 starter only")
     gemini_api_key: str = Field(
         default="", description="Google Gemini — primary workhorse + embeddings"
     )
@@ -42,6 +41,12 @@ class Settings(BaseSettings):
     embedding_model_voyage: str = "voyage-3"  # 1024-dim, 50M free tokens
     embedding_batch_size: int = 64  # chunks per embedding batch (tune for memory)
     embedding_dimensions: int = 768  # must match Qdrant collection — change if provider changes
+    ingestion_max_workers: int = 2  # source-level workers for embed/upsert phases
+    hf_max_parallel_sources: int = 2  # hard cap for source-level concurrency in hf_inference mode
+    hf_max_concurrent_requests: int = 2  # concurrent HF embedding requests across workers
+    hf_retry_max_attempts: int = 5
+    hf_retry_initial_delay_seconds: float = 1.0
+    hf_retry_max_delay_seconds: float = 12.0
 
     # === Reranking (optional post-retrieval stage) ===
     rerank_enabled: bool = True
@@ -52,7 +57,7 @@ class Settings(BaseSettings):
 
     # === Contextual chunk summaries ===
     contextual_summary_enabled: bool = True
-    contextual_summary_metadata_min_chars: int = 400
+    contextual_summary_metadata_min_chars: int = 250
     contextual_summary_max_chars: int = 600
     contextual_summary_prefix_label: str = "Context"
     contextual_summary_llm_fallback_enabled: bool = True
@@ -79,8 +84,11 @@ class Settings(BaseSettings):
 
     # === Eval runner defaults ===
     eval_provider: str = "gemini"
-    eval_model: str = "gemini-2.0-flash"
+    eval_model: str = "gemini-3.5-flash"
+    eval_fallback_chain_csv: str = ""
     eval_top_k: int = 8
+    eval_llm_rate_limit_calls: int = 4
+    eval_llm_rate_limit_window_seconds: float = 60.0
     eval_dataset_path: str = "data/eval/golden_qa_v0_30.jsonl"
     eval_results_dir: str = "data/eval/results"
 
@@ -90,11 +98,6 @@ class Settings(BaseSettings):
     # === App config ===
     env: str = "development"
     log_level: str = "INFO"
-
-    # === Model selection (3-tier strategy, no-card path) ===
-    dev_model: str = "gemini-2.0-flash"
-    speed_model: str = "groq/llama-3.3-70b-versatile"
-    eval_judge_model: str = "gemini-2.0-flash"
 
     # === Cost controls (set on day one, never bypass) ===
     max_cost_per_request_usd: float = 0.10

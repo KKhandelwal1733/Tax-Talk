@@ -20,6 +20,8 @@ class EmbeddingManifest(BaseModel):
     embedding_dimensions: int = Field(ge=0)
     embedding_provider: str = Field(min_length=1)
     embedding_model: str = Field(min_length=1)
+    qdrant_collection: str = ""
+    chunking_strategy: str = ""
     embedding_batch_size: int = Field(ge=1)
     ingest_batch_size: int = Field(ge=1)
     generated_at_unix: float = Field(ge=0)
@@ -42,6 +44,9 @@ class ChunkRecord(BaseModel):
     section_number_new: str = ""
     section_number_old: str = ""
     section_title: str = ""
+    contextual_summary: str = ""
+    contextual_summary_source: Literal["metadata", "llm", "none"] | str = "none"
+    chunking_strategy: str = "contextual"
     chunk_index: int = Field(ge=0)
     total_chunks: int = Field(ge=0)
     char_start: int = Field(ge=0)
