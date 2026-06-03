@@ -29,8 +29,11 @@ jobs:
       - name: Sync dependencies (locked)
         run: uv sync --frozen --extra dev
 
-      - name: Lint
-        run: uv run ruff check src tests
+      - name: Auto-fix lint issues
+        run: uv run ruff check src tests --fix
+
+      - name: Format
+        run: uv run ruff format src tests
 
       - name: Format check
         run: uv run ruff format --check src tests

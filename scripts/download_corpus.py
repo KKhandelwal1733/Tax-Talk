@@ -12,6 +12,7 @@ Usage:
   uv run python scripts/download_corpus.py --all
   uv run python scripts/download_corpus.py --source it_act_2025_icai --source it_act_1961_indiacode
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,7 +26,6 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 import requests
-
 from corpus_scripts import (
     CHUNK_METADATA_TEMPLATE,
     DOWNLOAD_PRIORITY,
@@ -118,7 +118,9 @@ def _build_sources(*, include_official: bool, include_all_user_sources: bool) ->
             preferred = item.get("preferred")
             if not isinstance(preferred, str):
                 continue
-            match = next((k for k, v in USER_PROVIDED_URLS.items() if v.get("url") == preferred), None)
+            match = next(
+                (k for k, v in USER_PROVIDED_URLS.items() if v.get("url") == preferred), None
+            )
             if match and match not in ordered_keys:
                 ordered_keys.append(match)
         sources = [all_user[k] for k in ordered_keys if k in all_user]
