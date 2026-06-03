@@ -22,7 +22,7 @@ from qdrant_client.models import (
 
 from tax_talk.core.config import settings
 from tax_talk.core.runtime import get_logger, get_qdrant_client
-from tax_talk.ingestion.chunker import Chunk
+from tax_talk.models.ingestion import Chunk
 
 log = get_logger(__name__)
 
@@ -30,9 +30,12 @@ log = get_logger(__name__)
 class QdrantStore:
     """Thin wrapper around QdrantClient for this project."""
 
-    def __init__(self) -> None:
+    def __init__(self, collection_name: str | None = None) -> None:
         self._client = get_qdrant_client()
-        self.collection = settings.qdrant_collection
+        chosen = (collection_name or settings.qdrant_collection).strip()
+        if not chosen:
+            raise ValueError("Qdrant collection name must not be blank")
+        self.collection = chosen
 
     def collection_exists(self) -> bool:
         return self._client.collection_exists(self.collection)

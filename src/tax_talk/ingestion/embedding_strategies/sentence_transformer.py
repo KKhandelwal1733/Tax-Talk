@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import time
 from math import ceil
-from threading import Lock
+from threading import Lock, Semaphore
 from typing import Any
 
 from tax_talk.core.config import settings
@@ -40,6 +41,7 @@ class LocalEmbeddingStrategy(EmbeddingStrategy):
             self._client = InferenceClient(token=settings.hf_token)
             self._model_name = model_name
             self._dim = settings.embedding_dimensions
+            self._hf_request_limiter = Semaphore(max(1, settings.hf_max_concurrent_requests))
             log.info("HF inference embedder ready. Expected dimensions: %d", self._dim)
             return
 
@@ -105,10 +107,41 @@ class LocalEmbeddingStrategy(EmbeddingStrategy):
             all_vectors: list[list[float]] = []
             for i in range(0, len(safe_texts), batch_size):
                 batch = safe_texts[i : i + batch_size]
-                response = self._client.feature_extraction(
-                    text=batch,
-                    model=self._model_name,
-                )
+                response: Any | None = None
+                last_error: Exception | None = None
+                max_attempts = max(1, settings.hf_retry_max_attempts)
+                for attempt in range(1, max_attempts + 1):
+                    try:
+                        with self._hf_request_limiter:
+                            response = self._client.feature_extraction(
+                                text=batch,
+                                model=self._model_name,
+                            )
+                        last_error = None
+                        break
+                    except Exception as exc:
+                        last_error = exc
+                        status_code = getattr(getattr(exc, "response", None), "status_code", None)
+                        retryable_status = {429, 500, 502, 503, 504}
+                        should_retry = status_code in retryable_status or status_code is None
+                        if not should_retry or attempt >= max_attempts:
+                            raise
+
+                        backoff = min(
+                            settings.hf_retry_max_delay_seconds,
+                            settings.hf_retry_initial_delay_seconds * (2 ** (attempt - 1)),
+                        )
+                        log.warning(
+                            "HF embedding request failed (attempt %d/%d, status=%s). Retrying in %.1fs.",
+                            attempt,
+                            max_attempts,
+                            status_code,
+                            backoff,
+                        )
+                        time.sleep(backoff)
+
+                if response is None:
+                    raise RuntimeError("HF embedding request returned no response") from last_error
                 vectors = self._normalize_vectors(response)
                 all_vectors.extend(vectors)
 
