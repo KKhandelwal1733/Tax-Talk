@@ -70,7 +70,7 @@ class LocalEmbeddingStrategy(EmbeddingStrategy):
 
         first = result[0]
         if isinstance(first, (int, float)):  # noqa: UP038
-            return [[float(v) for v in result]]  
+            return [[float(v) for v in result]]
 
         vectors: list[list[float]] = []
         for row in result:
