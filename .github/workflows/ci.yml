@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
@@ -24,10 +25,11 @@ jobs:
       - name: Set up Python
         run: uv python install ${{ matrix.python-version }}
 
-      - name: Install dependencies
-        run: uv sync --extra dev
+      # IMPORTANT FIX
+      - name: Sync dependencies (locked)
+        run: uv sync --frozen --extra dev
 
-      - name: Lint with ruff
+      - name: Lint
         run: uv run ruff check src tests
 
       - name: Format check
@@ -35,7 +37,7 @@ jobs:
 
       - name: Type check
         run: uv run mypy src
-        continue-on-error: true  # tighten this once mypy strict mode is on
+        continue-on-error: true
 
       - name: Run tests
         run: uv run pytest -v
