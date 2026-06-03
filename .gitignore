@@ -27,7 +27,6 @@ venv/
 env/
 ENV/
 .uv/
-uv.lock
 
 # Testing
 .pytest_cache/
@@ -90,3 +89,6 @@ postgres_data/
 .env.example
 help.py
 langfuse/*
+*ts.txt
+freeze.txt
+debug.py

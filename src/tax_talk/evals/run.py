@@ -14,8 +14,6 @@ log = get_logger(__name__)
 _STAGES = ("retrieve", "score", "all")
 
 
-
-
 def main() -> None:
     """CLI entrypoint for evaluation runs.
 
@@ -54,14 +52,28 @@ def main() -> None:
 
     # -- retrieve args -------------------------------------------------------
     retrieve_group = parser.add_argument_group("retrieve stage")
-    retrieve_group.add_argument("--collection", default=settings.qdrant_collection, help="Qdrant collection name")
-    retrieve_group.add_argument("--chunking-strategy", default=settings.chunking_strategy, help="Chunking strategy label")
-    retrieve_group.add_argument("--output-dir", default=settings.eval_results_dir, help="Directory for output files")
+    retrieve_group.add_argument(
+        "--collection", default=settings.qdrant_collection, help="Qdrant collection name"
+    )
+    retrieve_group.add_argument(
+        "--chunking-strategy", default=settings.chunking_strategy, help="Chunking strategy label"
+    )
+    retrieve_group.add_argument(
+        "--output-dir", default=settings.eval_results_dir, help="Directory for output files"
+    )
 
-    retrieve_group.add_argument("--dataset", default=settings.eval_dataset_path, help="Path to golden QA JSONL")
-    retrieve_group.add_argument("--provider", default=settings.eval_provider, help="LLM provider for answer generation")
-    retrieve_group.add_argument("--model", default=settings.eval_model, help="Model name for generation")
-    retrieve_group.add_argument("--top-k", type=int, default=settings.eval_top_k, help="Retriever top_k per query")
+    retrieve_group.add_argument(
+        "--dataset", default=settings.eval_dataset_path, help="Path to golden QA JSONL"
+    )
+    retrieve_group.add_argument(
+        "--provider", default=settings.eval_provider, help="LLM provider for answer generation"
+    )
+    retrieve_group.add_argument(
+        "--model", default=settings.eval_model, help="Model name for generation"
+    )
+    retrieve_group.add_argument(
+        "--top-k", type=int, default=settings.eval_top_k, help="Retriever top_k per query"
+    )
     retrieve_group.add_argument(
         "--fallback-chain",
         default=settings.eval_fallback_chain_csv,

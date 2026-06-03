@@ -5,7 +5,6 @@ import pytest
 from tax_talk.evals import runner
 from tax_talk.evals.runner import _parse_fallback_chain
 
-
 # ---------------------------------------------------------------------------
 # Dummy helpers
 # ---------------------------------------------------------------------------
@@ -84,7 +83,9 @@ def test_parse_fallback_chain_empty_model_raises_value_error() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_generate_answer_primary_succeeds_no_fallback_attempted(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_generate_answer_primary_succeeds_no_fallback_attempted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     primary = DummyStrategy(response="primary answer")
     fallback = DummyStrategy(response="fallback answer")
     limiter = DummyLimiter()

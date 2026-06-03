@@ -73,7 +73,9 @@ def build_metadata_summary(doc: SourceDocument) -> str:
     if not parts:
         act_name = chunk_metadata.get("act_name") or doc.source_key
         doc_type = chunk_metadata.get("doc_type") or "document"
-        period = ingestion_metadata.get("applicable_period") or chunk_metadata.get("applicable_period")
+        period = ingestion_metadata.get("applicable_period") or chunk_metadata.get(
+            "applicable_period"
+        )
         status = ingestion_metadata.get("act_status") or chunk_metadata.get("act_status")
 
         fallback_parts = [f"{act_name} ({doc_type})"]

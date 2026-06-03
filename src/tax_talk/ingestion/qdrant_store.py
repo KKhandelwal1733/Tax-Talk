@@ -9,7 +9,6 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from langfuse import observe
 from qdrant_client.models import (
     Distance,
     FieldCondition,
@@ -20,6 +19,7 @@ from qdrant_client.models import (
     VectorParams,
 )
 
+from langfuse import observe
 from tax_talk.core.config import settings
 from tax_talk.core.runtime import get_logger, get_qdrant_client
 from tax_talk.models.ingestion import Chunk

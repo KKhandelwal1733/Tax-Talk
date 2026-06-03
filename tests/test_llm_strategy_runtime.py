@@ -50,9 +50,7 @@ def test_get_llm_strategy_returns_groq_singleton(monkeypatch) -> None:
                 completions=SimpleNamespace(
                     create=lambda **kwargs: SimpleNamespace(
                         choices=[
-                            SimpleNamespace(
-                                message=SimpleNamespace(content="generated from groq")
-                            )
+                            SimpleNamespace(message=SimpleNamespace(content="generated from groq"))
                         ]
                     )
                 )

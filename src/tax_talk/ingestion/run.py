@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Literal
 
 from langfuse import observe
-
 from tax_talk.core.config import settings
 from tax_talk.core.runtime import get_langfuse_client, get_logger
 from tax_talk.ingestion.chunker import (
@@ -301,7 +300,8 @@ def run_ingestion(
     else:
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ingest") as executor:
             futures = {
-                executor.submit(process_source, source_key): source_key for source_key in active_source_keys
+                executor.submit(process_source, source_key): source_key
+                for source_key in active_source_keys
             }
             for future in as_completed(futures):
                 source_key = futures[future]

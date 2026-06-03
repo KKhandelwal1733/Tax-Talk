@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from langfuse import observe
-
 from tax_talk.generation.llm_provider import LLMStrategy
 
 

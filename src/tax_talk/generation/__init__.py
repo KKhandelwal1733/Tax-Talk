@@ -5,7 +5,7 @@ from tax_talk.generation.groq_strategy import GroqLLMStrategy
 from tax_talk.generation.llm_provider import LLMStrategy
 
 __all__ = [
-	"GeminiLLMStrategy",
-	"GroqLLMStrategy",
-	"LLMStrategy",
+    "GeminiLLMStrategy",
+    "GroqLLMStrategy",
+    "LLMStrategy",
 ]

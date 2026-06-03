@@ -7,10 +7,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from langfuse import observe
 from ragas import EvaluationDataset, RunConfig, SingleTurnSample, evaluate
 from ragas.metrics import AnswerCorrectness, ContextPrecision, ContextRecall, Faithfulness
 
+from langfuse import observe
 from tax_talk.core.config import settings
 from tax_talk.core.rate_limit import SlidingWindowRateLimiter
 from tax_talk.core.runtime import get_langfuse_client, get_llm_strategy, get_logger
@@ -33,6 +33,7 @@ _eval_answer_rate_limiter = SlidingWindowRateLimiter(
 # ---------------------------------------------------------------------------
 # RAGAS evaluator — built lazily on first scoring call
 # ---------------------------------------------------------------------------
+
 
 def _build_ragas_evaluator() -> tuple[Any, Any]:
     """Build RAGAS LLM judge and Google embeddings lazily.
@@ -65,6 +66,7 @@ def _build_ragas_evaluator() -> tuple[Any, Any]:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _parse_fallback_chain(csv: str) -> list[tuple[str, str]]:
     """Parse a CSV fallback chain string into an ordered list of (provider, model) pairs.
@@ -109,6 +111,7 @@ def _parse_fallback_chain(csv: str) -> list[tuple[str, str]]:
 # Data model
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class EvalRow:
     """Per-sample intermediate payload — retrieval output before RAGAS scoring."""
@@ -145,7 +148,10 @@ def _rows_from_jsonl(path: Path) -> list[EvalRow]:
 # Stage 1 — retrieve + generate, dump to JSONL
 # ---------------------------------------------------------------------------
 
-@observe(name="eval-generate-answer", as_type="generation", capture_input=False, capture_output=False)
+
+@observe(
+    name="eval-generate-answer", as_type="generation", capture_input=False, capture_output=False
+)
 def _generate_grounded_answer(
     *,
     question: str,
@@ -203,8 +209,7 @@ def _generate_grounded_answer(
                 exc,
             )
     raise RuntimeError(
-        f"All {len(attempts)} eval generation attempt(s) failed. "
-        + "; ".join(failures)
+        f"All {len(attempts)} eval generation attempt(s) failed. " + "; ".join(failures)
     )
 
 
@@ -320,6 +325,7 @@ def dump_retrieval_rows(
 # Stage 2 — score a dump with RAGAS (no LLM retrieval)
 # ---------------------------------------------------------------------------
 
+
 @observe(name="eval-ragas", as_type="span", capture_input=False, capture_output=False)
 def compute_ragas_scores(rows: list[EvalRow]) -> tuple[dict[str, float], list[dict[str, Any]]]:
     """Compute RAGAS metrics using Gemini as the LLM judge.
@@ -395,11 +401,7 @@ def compute_ragas_scores(rows: list[EvalRow]) -> tuple[dict[str, float], list[di
 
         log.info("Batch %d/%d scored.", batch_idx + 1, total_batches)
 
-    aggregates = {
-        col: float(sum(vals) / len(vals))
-        for col, vals in all_scores.items()
-        if vals
-    }
+    aggregates = {col: float(sum(vals) / len(vals)) for col, vals in all_scores.items() if vals}
     return aggregates, all_row_metrics
 
 
@@ -452,6 +454,7 @@ def score_from_dump(*, dump_path: Path, output_dir: Path) -> Path:
 # ---------------------------------------------------------------------------
 # Stage 1+2 combined — single-shot entry point
 # ---------------------------------------------------------------------------
+
 
 @observe(name="eval-run", as_type="span", capture_input=True, capture_output=False)
 def run_eval(
@@ -528,9 +531,7 @@ def run_from_settings(
         Path to the written scored result JSON file.
     """
     raw_csv = (
-        fallback_chain_csv
-        if fallback_chain_csv is not None
-        else settings.eval_fallback_chain_csv
+        fallback_chain_csv if fallback_chain_csv is not None else settings.eval_fallback_chain_csv
     )
     fallback_chain = _parse_fallback_chain(raw_csv)
     return run_eval(

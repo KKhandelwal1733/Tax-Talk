@@ -81,7 +81,9 @@ def _resolve_chunk_metadata(doc: SourceDocument) -> dict[str, str]:
         "applicable_period": str(
             ingestion_metadata.get(
                 "applicable_period",
-                chunk_metadata.get("applicable_period", metadata.get("applicable_period", "unknown")),
+                chunk_metadata.get(
+                    "applicable_period", metadata.get("applicable_period", "unknown")
+                ),
             )
             or "unknown"
         ),
@@ -101,7 +103,9 @@ def _resolve_chunk_metadata(doc: SourceDocument) -> dict[str, str]:
         "section_number_old": str(
             chunk_metadata.get("section_number_old", metadata.get("section_number_old", "")) or ""
         ),
-        "section_title": str(chunk_metadata.get("section_title", metadata.get("section_title", "")) or ""),
+        "section_title": str(
+            chunk_metadata.get("section_title", metadata.get("section_title", "")) or ""
+        ),
     }
 
 
@@ -203,7 +207,9 @@ def chunk_document(doc: SourceDocument, *, chunking_strategy: str | None = None)
     return chunks
 
 
-def chunk_documents(docs: list[SourceDocument], *, chunking_strategy: str | None = None) -> list[Chunk]:
+def chunk_documents(
+    docs: list[SourceDocument], *, chunking_strategy: str | None = None
+) -> list[Chunk]:
     """Chunk all documents. Returns flat list of all chunks."""
     resolved_strategy = resolve_chunking_strategy(chunking_strategy)
     all_chunks: list[Chunk] = []

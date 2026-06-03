@@ -16,4 +16,3 @@ class FixedChunkingStrategy(ChunkingStrategy):
             chunk_size=settings.chunk_size_chars,
             overlap=settings.chunk_overlap_chars,
         )
-

@@ -11,6 +11,3 @@ def payload_matches_filters(payload: dict[str, Any], filters: dict[str, Any]) ->
         if payload.get(key) != expected:
             return False
     return True
-
-
-

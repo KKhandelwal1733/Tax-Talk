@@ -42,6 +42,3 @@ def reciprocal_rank_fusion(
         result.append(payload)
 
     return result
-
-
-

@@ -22,7 +22,8 @@ def _build_doc(*, source_meta: dict[str, str] | None = None) -> SourceDocument:
         ),
         metadata={
             "filename": "source.pdf",
-            "source_meta": source_meta or {
+            "source_meta": source_meta
+            or {
                 "content": (
                     "Central Goods and Services Tax Act, 2017 - core law for levy and "
                     "collection of GST on intra-State supply of goods or services."
@@ -99,7 +100,9 @@ def test_chunk_document_falls_back_to_llm_for_weak_metadata(monkeypatch) -> None
 
     assert chunk.contextual_summary_source == "llm"
     assert chunk.contextual_summary == "Generated summary for GST charging, returns, and penalties."
-    assert chunk.text.startswith("Context: Generated summary for GST charging, returns, and penalties.")
+    assert chunk.text.startswith(
+        "Context: Generated summary for GST charging, returns, and penalties."
+    )
 
 
 def test_chunk_document_uses_plain_text_when_fallback_fails(monkeypatch) -> None:

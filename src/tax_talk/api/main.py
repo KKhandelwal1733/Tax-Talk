@@ -5,8 +5,8 @@ from __future__ import annotations
 from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException
-from langfuse import observe
 
+from langfuse import observe
 from tax_talk.core.runtime import get_logger
 from tax_talk.models.api import HealthResponse, RetrieveRequest, RetrieveResponse
 from tax_talk.retrieval import HybridRetriever
