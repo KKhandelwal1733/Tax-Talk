@@ -178,10 +178,18 @@ def _generate_grounded_answer(
     attempts = [(provider, model)] + (fallback_chain or [])
     joined_context = "\n\n".join(contexts[:8])
     prompt = (
-        "Answer the tax question using only the provided context. "
-        "If context is insufficient, say so explicitly. Keep answer concise.\n\n"
+        "You are an expert Tax AI Assistant specialized in Indian Tax Statutes (CGST, IGST, Income-tax Act 1961, and Income-tax Act 2025).\n"
+        "Your task is to answer the following user question by analyzing and synthesizing the provided tax context chunks.\n\n"
+        
+        "CRITICAL CONSTRAINTS & REASONING GUIDELINES:\n"
+        "1. Read the provided context fragments collectively. Synthesize cross-references smoothly (e.g., if one chunk outlines a rule and another outlines an aggregate limit or exception, combine them to give a complete legal conclusion).\n"
+        "2. Recognize statutory terminology alignments (e.g., treat 'clinical establishment/authorized medical practitioner' as synonymous with 'healthcare/hospitals', or 'renting of immovable property' with 'leasing/renting properties') to prevent false negative answers.\n"
+        "3. Keep your response clear, concise, and professional. Use structured bullet points where applicable for thresholds, rates, or slab structures.\n"
+        "4. MANDATORY GROUNDING: Rely strictly on the facts present in the text. Do not invent section numbers, circulars, or financial dates. If the context is genuinely insufficient to derive a reliable legal conclusion, state clearly what specific piece of information is missing from the text.\n\n"
+        
         f"Question: {question}\n\n"
-        f"Context:\n{joined_context}"
+        f"Context Chunks:\n{joined_context}\n\n"
+        "Answer:"
     )
     failures: list[str] = []
     for idx, (prov, mod) in enumerate(attempts):
