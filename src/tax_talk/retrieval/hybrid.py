@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from langfuse import observe
+
 from tax_talk.core.config import settings
 from tax_talk.core.runtime import get_cohere_client, get_logger
-from tax_talk.ingestion.embeddings import embed_query as embed_query
 from tax_talk.ingestion.qdrant_store import QdrantStore
 from tax_talk.retrieval.bm25_index import Bm25Searcher
 from tax_talk.retrieval.dense_search import run_dense_search
@@ -24,6 +24,7 @@ class HybridRetriever:
         self,
         store: QdrantStore | None = None,
         *,
+        collection_name: str | None = None,
         rrf_k: int = 60,
         dense_weight: float = 1.0,
         bm25_weight: float = 1.0,
@@ -42,7 +43,7 @@ class HybridRetriever:
         if resolved_rerank_top_k <= 0 or resolved_rerank_top_n <= 0:
             raise ValueError("rerank_top_k and rerank_top_n must be > 0")
 
-        self._store = store or QdrantStore()
+        self._store = store or QdrantStore(collection_name=collection_name)
         self._rrf_k = rrf_k
         self._dense_weight = dense_weight
         self._bm25_weight = bm25_weight

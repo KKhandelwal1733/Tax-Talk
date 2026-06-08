@@ -61,8 +61,10 @@ service-account*.json
 # Data — large files
 data/raw/*
 data/processed/*
+data/eval/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/eval/.gitkeep
 *.csv
 *.parquet
 *.pkl
@@ -91,4 +93,4 @@ help.py
 langfuse/*
 *ts.txt
 freeze.txt
-debug.py
+debug.ipynb
