@@ -80,12 +80,11 @@ def _artifact_paths(chunking_strategy: str, source_key: str) -> tuple[Path, Path
 def _delete_stage_artifacts(chunking_strategy: str, source_key: str, from_stage: Stage) -> None:
     chunks_path, embeddings_path, manifest_path = _artifact_paths(chunking_strategy, source_key)
 
+    paths: list[Path] = []
     if from_stage == "chunk":
-        paths = (chunks_path, embeddings_path, manifest_path)
+        paths = [chunks_path, embeddings_path, manifest_path]
     elif from_stage == "embed":
-        paths = (embeddings_path, manifest_path)
-    else:
-        paths = ()
+        paths = [embeddings_path, manifest_path]
 
     for path in paths:
         if path.exists():

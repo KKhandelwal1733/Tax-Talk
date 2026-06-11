@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from ragas import EvaluationDataset, RunConfig, SingleTurnSample, evaluate
-from ragas.metrics import AnswerCorrectness, ContextPrecision, ContextRecall, Faithfulness
+from ragas.metrics.collections import (
+    AnswerCorrectness,
+    ContextPrecision,
+    ContextRecall,
+    Faithfulness,
+)
 
 from langfuse import observe
 from tax_talk.core.config import settings
@@ -140,16 +145,12 @@ def _build_ragas_evaluators() -> list[tuple[Any, Any]]:
     """
     from ragas.embeddings import GoogleEmbeddings
     from ragas.llms import llm_factory
-    
     from tax_talk.core.runtime import get_gemini_client, get_groq_client
 
     primary_provider = settings.eval_provider.strip().lower()
     primary_model = settings.eval_model.strip()
     fallback_chain = _parse_fallback_chain(settings.eval_fallback_chain_csv)
-    all_attempts = [
-    (primary_provider, primary_model),
-    *fallback_chain,
-    ]
+    all_attempts = [(primary_provider, primary_model)] + fallback_chain
 
     # --- Embeddings (always Gemini) ---
     gemini_attempts = [(p, m) for p, m in all_attempts if p == "gemini"]
@@ -293,7 +294,10 @@ def _build_metrics(llm: Any, embeddings: Any) -> list:
         Faithfulness(llm=llm),
         ContextPrecision(llm=llm),
         ContextRecall(llm=llm),
-        AnswerCorrectness(llm=llm, embeddings=embeddings),
+        # weights: [factual_correctness, semantic_similarity]
+        # Default [0.75, 0.25] penalises verbose answers against concise ground truths.
+        # Using [1.0, 0.0] scores purely on factual overlap, ignoring format differences.
+        AnswerCorrectness(llm=llm, embeddings=embeddings, weights=[1.0, 0.0]),
     ]
 
 

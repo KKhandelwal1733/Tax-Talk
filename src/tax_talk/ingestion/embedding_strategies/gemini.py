@@ -17,7 +17,7 @@ class GeminiEmbeddingStrategy(EmbeddingStrategy):
     _MAX_BATCH = 100
 
     def __init__(self) -> None:
-        import google.generativeai as genai  # lazy import
+        import google.genai as genai  # lazy import
 
         genai.configure(api_key=settings.gemini_api_key)
         self._genai = genai
