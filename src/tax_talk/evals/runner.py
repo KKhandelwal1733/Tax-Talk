@@ -81,13 +81,13 @@ def _parse_fallback_chain(csv: str) -> list[tuple[str, str]]:
         if not entry:
             continue
         if "/" not in entry or entry.count("/") != 1:
-            raise ValueError(f"Invalid fallback entry '{entry}': expected 'provider/model'.")
+            raise ValueError(f"Invalid fallback entry '{entry}': expected 'provider/model' format.")
         provider, model = entry.split("/", 1)
         provider, model = provider.strip().lower(), model.strip()
         if provider not in _VALID_PROVIDERS:
             raise ValueError(f"Unknown provider '{provider}'. Supported: {sorted(_VALID_PROVIDERS)}")
         if not model:
-            raise ValueError(f"Empty model in fallback entry '{entry}'.")
+            raise ValueError(f"Empty model name in fallback entry '{entry}'.")
         pairs.append((provider, model))
     return pairs
 

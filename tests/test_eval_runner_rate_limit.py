@@ -22,7 +22,7 @@ class _FakeStrategy:
 
 
 def test_eval_rate_limit_defaults() -> None:
-    cfg = Settings()
+    cfg = Settings(_env_file=None)
     assert cfg.eval_llm_rate_limit_calls == 4
     assert cfg.eval_llm_rate_limit_window_seconds == 60.0
 
