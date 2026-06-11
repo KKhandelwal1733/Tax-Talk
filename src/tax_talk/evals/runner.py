@@ -145,12 +145,16 @@ def _build_ragas_evaluators() -> list[tuple[Any, Any]]:
     """
     from ragas.embeddings import GoogleEmbeddings
     from ragas.llms import llm_factory
+
     from tax_talk.core.runtime import get_gemini_client, get_groq_client
 
     primary_provider = settings.eval_provider.strip().lower()
     primary_model = settings.eval_model.strip()
     fallback_chain = _parse_fallback_chain(settings.eval_fallback_chain_csv)
-    all_attempts = [(primary_provider, primary_model)] + fallback_chain
+    all_attempts = [
+        (primary_provider, primary_model),
+        *fallback_chain,
+        ]
 
     # --- Embeddings (always Gemini) ---
     gemini_attempts = [(p, m) for p, m in all_attempts if p == "gemini"]
