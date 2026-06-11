@@ -293,8 +293,14 @@ def _build_metrics(llm: Any, embeddings: Any) -> list:
     ]
 
 
-def _score_batch(batch: list[EvalRow], evaluators: list[tuple[Any, Any]], run_config: RunConfig) -> Any:
-    """Score a single batch, falling back through evaluator candidates on failure."""
+def _score_batch(
+    batch: list[EvalRow], evaluators: list[tuple[Any, Any]], run_config: RunConfig,
+) -> Any:
+    """Score a single batch, falling back through evaluator candidates on failure.
+
+    Raises:
+        RuntimeError: If all evaluators fail for this batch.
+    """
     dataset = EvaluationDataset(samples=[
         SingleTurnSample(
             user_input=r.question, response=r.answer,
@@ -315,14 +321,25 @@ def _score_batch(batch: list[EvalRow], evaluators: list[tuple[Any, Any]], run_co
     raise RuntimeError(f"All {len(evaluators)} RAGAS evaluator(s) failed for batch. Last: {last_exc}")
 
 
+_FAILED_SENTINEL: dict[str, float | None] = {
+    "faithfulness": None, "context_precision": None,
+    "context_recall": None, "answer_correctness": None,
+}
+
+
 @observe(name="eval-ragas", as_type="span", capture_input=False, capture_output=False)
-def compute_ragas_scores(rows: list[EvalRow]) -> tuple[dict[str, float], list[dict[str, Any]]]:
-    """Compute RAGAS metrics, falling back to alternate evaluators on failure."""
+def compute_ragas_scores(rows: list[EvalRow]) -> tuple[dict[str, float], list[dict[str, Any]], list[str]]:
+    """Compute RAGAS metrics with evaluator fallback and graceful batch failure.
+
+    Returns:
+        Tuple of (aggregate metrics, per-row metrics, list of failed sample IDs).
+    """
     evaluators = _get_ragas_evaluators()
     run_config = RunConfig(max_workers=1)
     metric_cols = ["faithfulness", "context_precision", "context_recall", "answer_correctness"]
     all_scores: dict[str, list[float]] = {c: [] for c in metric_cols}
     all_row_metrics: list[dict[str, Any]] = []
+    failed_sample_ids: list[str] = []
     total_batches = math.ceil(len(rows) / _RAGAS_BATCH_SIZE)
 
     for batch_idx, start in enumerate(range(0, len(rows), _RAGAS_BATCH_SIZE)):
@@ -333,16 +350,25 @@ def compute_ragas_scores(rows: list[EvalRow]) -> tuple[dict[str, float], list[di
         batch = rows[start : start + _RAGAS_BATCH_SIZE]
         log.info("Scoring batch %d/%d (%d rows) ...", batch_idx + 1, total_batches, len(batch))
 
-        result = _score_batch(batch, evaluators, run_config)
-        frame = result.to_pandas()
+        try:
+            result = _score_batch(batch, evaluators, run_config)
+            frame = result.to_pandas()
+            for col in metric_cols:
+                if col in frame.columns:
+                    all_scores[col].extend(frame[col].dropna().tolist())
+            all_row_metrics.extend(frame.to_dict(orient="records"))
+            log.info("Batch %d/%d scored.", batch_idx + 1, total_batches)
+        except RuntimeError:
+            batch_ids = [r.id for r in batch]
+            failed_sample_ids.extend(batch_ids)
+            for r in batch:
+                all_row_metrics.append({"id": r.id, "status": "scoring_failed", **_FAILED_SENTINEL})
+            log.error("Batch %d/%d FAILED — all evaluators exhausted. Skipping samples: %s", batch_idx + 1, total_batches, batch_ids)
 
-        for col in metric_cols:
-            if col in frame.columns:
-                all_scores[col].extend(frame[col].dropna().tolist())
-        all_row_metrics.extend(frame.to_dict(orient="records"))
-        log.info("Batch %d/%d scored.", batch_idx + 1, total_batches)
-
-    return {c: sum(v) / len(v) for c, v in all_scores.items() if v}, all_row_metrics
+    aggregates = {c: sum(v) / len(v) for c, v in all_scores.items() if v}
+    if failed_sample_ids:
+        log.warning("%d/%d samples failed scoring: %s", len(failed_sample_ids), len(rows), failed_sample_ids)
+    return aggregates, all_row_metrics, failed_sample_ids
 
 
 @observe(name="eval-score-dump", as_type="span", capture_input=True, capture_output=False)
@@ -353,7 +379,7 @@ def score_from_dump(*, dump_path: Path, output_dir: Path) -> Path:
         raise ValueError(f"No rows found in dump: {dump_path}")
 
     log.info("Scoring %d rows from dump: %s", len(rows), dump_path)
-    aggregates, ragas_rows = compute_ragas_scores(rows)
+    aggregates, ragas_rows, failed_ids = compute_ragas_scores(rows)
 
     first = rows[0]
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -364,6 +390,9 @@ def score_from_dump(*, dump_path: Path, output_dir: Path) -> Path:
         "collection": first.collection,
         "chunking_strategy": first.chunking_strategy,
         "sample_count": len(rows),
+        "scored_count": len(rows) - len(failed_ids),
+        "failed_count": len(failed_ids),
+        "failed_sample_ids": failed_ids,
         "metrics": {**aggregates, "latency_p95_ms": _p95([r.latency_ms for r in rows])},
         "samples": [asdict(r) for r in rows],
         "ragas_rows": ragas_rows,
