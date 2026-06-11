@@ -72,7 +72,7 @@ def cohere_rerank_candidates(
         if relevance_score is None and isinstance(item, dict):
             relevance_score = item.get("relevance_score")
 
-        if isinstance(relevance_score, (int, float)):
+        if isinstance(relevance_score, (int, float)): # noqa: UP038
             if float(relevance_score) < relevance_threshold:
                 continue  
 
@@ -81,7 +81,7 @@ def cohere_rerank_candidates(
             continue
 
         row = dict(candidates[candidate_idx])
-        if isinstance(relevance_score, (int, float)):
+        if isinstance(relevance_score, (int, float)):# noqa: UP038
             row["rerank_score"] = float(relevance_score)
         row["rerank_rank"] = rerank_rank
         selected.append(row)

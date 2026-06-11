@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from langfuse import observe
-
 from tax_talk.core.config import settings
 from tax_talk.core.runtime import get_cohere_client, get_logger
 from tax_talk.ingestion.qdrant_store import QdrantStore
