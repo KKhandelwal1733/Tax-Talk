@@ -28,12 +28,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/) + custom analysis.
 ## [0.2.10] — 2026-06-01
 
 ### What Changed
-- `src/tax_talk/evals/runner.py`: merged lazy RAGAS evaluator builder from `runner-test.py` into production runner as `_build_ragas_evaluator()`.
+- `src/tax_talk/evals/runner.py`: merged lazy RAGAS evaluator builder into production runner as `_build_ragas_evaluator()`.
 - `src/tax_talk/evals/runner.py`: updated `compute_ragas_scores(...)` to build `EvaluationDataset` with `SingleTurnSample` and call `evaluate(..., llm=evaluator_llm, embeddings=evaluator_embeddings)`.
 - `src/tax_talk/evals/runner.py`: kept evaluator-specific imports deferred via `import_module(...)` and keyed to `settings.gemini_api_key` for eval-only initialization.
 
 ### Why Changed
-- User requested implementing the `runner-test.py` evaluation approach into `runner.py` while keeping project structure intact.
+- User requested implementing evaluation approach into `runner.py` while keeping project structure intact.
 
 ### Pros
 - Preserves architecture rule: eval-only heavy clients stay lazily initialized and out of runtime singletons.
