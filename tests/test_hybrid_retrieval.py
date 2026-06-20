@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from tax_talk.core.config import settings
 from tax_talk.retrieval.helpers.filters import payload_matches_filters
 from tax_talk.retrieval.helpers.tokenization import tokenize
@@ -30,6 +32,32 @@ class DummyStore:
         if filters:
             hits = [h for h in hits if payload_matches_filters(h, filters)]
         return hits[:top_k]
+
+
+@pytest.fixture(autouse=True)
+def _stub_dense_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fake_run_dense_search(
+        *,
+        store: DummyStore,
+        query: str,
+        top_k: int,
+        filters: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        _ = query
+        return store.search(query_vector=[0.0], top_k=top_k, filters=filters)
+
+    async def _fake_run_dense_search_async(
+        *,
+        store: DummyStore,
+        query: str,
+        top_k: int,
+        filters: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        _ = query
+        return store.search(query_vector=[0.0], top_k=top_k, filters=filters)
+
+    monkeypatch.setattr("tax_talk.retrieval.hybrid.run_dense_search", _fake_run_dense_search)
+    monkeypatch.setattr("tax_talk.retrieval.hybrid.run_dense_search_async", _fake_run_dense_search_async)
 
 
 def test_tokenize_keeps_identifiers_and_numbers() -> None:

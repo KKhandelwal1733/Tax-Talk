@@ -123,9 +123,9 @@ class DummyLangfuseClientWithObservation:
 def test_demo_langfuse_observer(monkeypatch: pytest.MonkeyPatch) -> None:
     langfuse = pytest.importorskip("langfuse")
 
-    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-demo")
-    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-demo")
-    monkeypatch.setenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
     monkeypatch.setattr(langfuse, "get_client", dummy_get_client)
     monkeypatch.setattr(runtime, "_langfuse_client", None)
     monkeypatch.setattr(runtime, "settings", config.Settings())
@@ -135,8 +135,6 @@ def test_demo_langfuse_observer(monkeypatch: pytest.MonkeyPatch) -> None:
         return value * 2
 
     assert demo_observed(3) == 6
-    assert os.environ["LANGFUSE_PUBLIC_KEY"] == "pk-demo"
-    assert os.environ["LANGFUSE_SECRET_KEY"] == "sk-demo"
 
 
 def test_flush_langfuse_client_flushes_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
