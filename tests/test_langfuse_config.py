@@ -10,6 +10,12 @@ from tax_talk.ingestion import embeddings
 
 
 class DummyLangfuseClient:
+    def __init__(self) -> None:
+        self.flush_called = False
+
+    def flush(self) -> None:
+        self.flush_called = True
+
     def __repr__(self) -> str:
         return "<DummyLangfuseClient>"
 
@@ -131,3 +137,12 @@ def test_demo_langfuse_observer(monkeypatch: pytest.MonkeyPatch) -> None:
     assert demo_observed(3) == 6
     assert os.environ["LANGFUSE_PUBLIC_KEY"] == "pk-demo"
     assert os.environ["LANGFUSE_SECRET_KEY"] == "sk-demo"
+
+
+def test_flush_langfuse_client_flushes_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = DummyLangfuseClient()
+    monkeypatch.setattr(runtime, "_langfuse_client", client)
+
+    runtime.flush_langfuse_client()
+
+    assert client.flush_called is True

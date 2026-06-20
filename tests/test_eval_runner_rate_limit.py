@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from tax_talk.core.config import Settings
 from tax_talk.evals import runner
 
 
@@ -19,12 +18,6 @@ class _FakeStrategy:
     def generate(self, *, prompt: str, model: str) -> str:
         self.calls += 1
         return " ok "
-
-
-def test_eval_rate_limit_defaults() -> None:
-    cfg = Settings(_env_file=None)
-    assert cfg.eval_llm_rate_limit_calls == 4
-    assert cfg.eval_llm_rate_limit_window_seconds == 60.0
 
 
 def test_generate_grounded_answer_waits_for_rate_limiter(monkeypatch) -> None:

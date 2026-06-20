@@ -65,9 +65,7 @@ def test_hybrid_retrieval_rrf_fuses_dense_and_bm25() -> None:
     ]
 
     retriever = HybridRetriever(
-        store=DummyStore(payloads=payloads, dense_hits=dense_hits),
-        rrf_k=60,
-        rerank_enabled=False,
+        store=DummyStore(payloads=payloads, dense_hits=dense_hits), rrf_k=60
     )
     results = retriever.retrieve("section 54F exemption", top_k=2, dense_top_k=2, bm25_top_k=2)
 
