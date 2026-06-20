@@ -26,11 +26,13 @@ User question
                   ▼
 ┌─────────────────────────────────────────────┐
 │ API response                                │
-│  • POST /retrieve returns ranked hit payloads│
-│  • GET /health for liveness                  │
+│  • POST /chat returns grounded answer + cites│
+│  • POST /chat/stream streams SSE events      │
+│    (event/id/data contract)                  │
+│  • GET /health/live and /health/ready        │
 └─────────────────┬───────────────────────────┘
                   ▼
-            Ranked chunks + scores
+        Grounded answer + citations
 
 Langfuse tracing is implemented for API + retrieval spans.
 ```
@@ -89,13 +91,25 @@ Each decision below should have: *what* / *why* / *alternatives considered* / *h
 - **Behavioral safeguard:** fail-open fallback to fused ranking when key is missing or rerank call fails.
 - **Alternatives:** BGE reranker (self-hosted) and no-rerank mode.
 
-### Generation and faithfulness checks: partially implemented (strategy/runtime foundation)
-- **Current state:** no production answer-synthesis endpoint yet, but provider strategy/runtime plumbing is implemented for shared LLM calls.
-- **Implemented now:** runtime-owned singleton LLM strategy access for Gemini and Groq via `get_llm_strategy(...)` and provider client singletons in `src/tax_talk/core/runtime.py`.
+### Generation and faithfulness checks: partially implemented (chat synthesis now enabled)
+- **Current state:** chat synthesis endpoint is implemented (`/chat`, `/chat/stream`) using retrieval-backed prompts and provider strategy runtime.
+- **Implemented now:** runtime-owned singleton LLM strategy access for Gemini and Groq via `get_llm_strategy(...)` and async generation access via `get_llm_strategy_async(...)` in `src/tax_talk/core/runtime.py`.
 - **Contextual-summary usage:** ingestion LLM fallback routes through the strategy layer instead of direct SDK calls.
 - **Groq integration:** uses native Groq SDK client (`from groq import Groq`) rather than OpenAI-compat path.
 - **Configured eval defaults today:** `eval_provider=gemini`, `eval_model=gemini-3.5-flash`.
 - **How to revisit:** plug answer generation and judge stages into the same strategy/runtime abstraction to avoid provider-specific logic leaking into API handlers.
+
+### API lifespan + shutdown hygiene (implemented)
+- **Current behavior:** FastAPI lifespan warms Qdrant on startup and performs graceful shutdown hooks.
+- **Shutdown hooks:**
+    - flushes Langfuse buffered events (`flush_langfuse_client()`)
+    - closes Gemini client transports (`close_gemini_client()`), including async SDK handles when present
+- **Why:** prevent trace/event loss and reduce leaked client resources during process stop/reload.
+
+### API streaming contract (implemented)
+- **Current behavior:** `POST /chat/stream` uses FastAPI SSE primitives (`EventSourceResponse` + `ServerSentEvent`).
+- **Event format:** server emits SSE `event`, `id`, and JSON `data` fields for each token/done frame.
+- **Why:** align with FastAPI-native SSE behavior and improve stream client interoperability.
 
 ## Open questions
 

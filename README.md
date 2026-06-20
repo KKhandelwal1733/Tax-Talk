@@ -51,14 +51,11 @@ Architecture diagram: see [ARCHITECTURE.md](./ARCHITECTURE.md).
 | Eval framework | RAGAS + custom LLM-as-judge | Faithfulness, context relevance, citation accuracy |
 | Hosting | Azure VM (B1S, Central India) + Vercel frontend | Free via Azure for Students |
 
-### Embedding execution switch (sentence-transformers)
+### Embedding execution
 
-When `EMBEDDING_PROVIDER=local`, you can choose where the same sentence-transformer model runs:
+`EMBEDDING_PROVIDER=sentence_transformer` now runs only via Hugging Face Inference API and requires `HF_TOKEN`.
 
-- `EMBEDDING_LOCAL_MODE=local` (default): run on your machine.
-- `EMBEDDING_LOCAL_MODE=hf_inference`: run via Hugging Face hosted inference (requires `HF_TOKEN`).
-
-This lets you switch between local and hosted execution without changing ingestion code.
+`EMBEDDING_PROVIDER=gemini` runs via Gemini embeddings and requires `GEMINI_API_KEY`.
 
 ## Data sources (all official, public)
 
@@ -99,7 +96,7 @@ git clone https://github.com/KKhandelwal1733/Tax-Talk
 cd tax-talk
 
 # Install dependencies
-uv sync
+uv sync --extra dev
 
 # Bring up infrastructure (Qdrant)
 docker compose up -d
@@ -118,32 +115,85 @@ make serve
 make eval
 ```
 
+### Run the API in Docker
+
+If Qdrant is already running elsewhere, build and run only the API container:
+
+```bash
+docker build -t tax-talk-api .
+
+# If Qdrant is reachable from the host machine
+docker run --rm -p 8000:8000 --env-file .env \
+    -e QDRANT_URL=http://host.docker.internal:6333 \
+    tax-talk-api
+```
+
+If your Qdrant container is on a shared Docker network, replace `QDRANT_URL` with that container hostname, for example `http://qdrant:6333`.
+
 ### API endpoints
 
-- `GET /health`: liveness check.
-- `POST /retrieve`: hybrid retrieval (dense + BM25 + RRF) with optional Cohere rerank and metadata filters.
+- `GET /health/live`: liveness check.
+- `GET /health/ready`: readiness check (Qdrant connectivity).
+- `POST /chat`: grounded answer with citations.
+- `POST /chat/stream`: SSE token stream with terminal citations event.
+    - Uses FastAPI SSE response primitives (`EventSourceResponse` / `ServerSentEvent`).
+    - Emits sequential SSE `id` values per stream event.
 
 Example request:
 
 ```bash
-curl -X POST http://localhost:8000/retrieve \
+curl -X POST http://localhost:8000/chat \
+    -H "authorization: Bearer <SUPABASE_JWT>" \
     -H "content-type: application/json" \
     -d '{
         "query": "section 54F exemption",
         "top_k": 5,
         "dense_top_k": 20,
-        "bm25_top_k": 20,
-        "filters": {"act_status": "current"}
+        "bm25_top_k": 20
     }'
 ```
+
+The chat endpoints always use the configured `CHAT_MODEL` server-side; request payloads no longer accept a per-request model override.
+
+### Auth notes (Supabase JWT signature verification)
+
+Bearer tokens are verified with **full RSA signature validation** against your Supabase JWKS endpoint. The API requires:
+
+- **Token format:** `Authorization: Bearer <JWT>`
+- **Signature verification:** RS256 signature checked against `SUPABASE_URL/.well-known/jwks.json`
+- **Expiration check:** `exp` claim is always validated; expired tokens return 401
+- **Issuer check:** Always validated against `SUPABASE_JWT_ISSUER`; mismatches return 401
+- **Audience check:** Always validated against `SUPABASE_JWT_AUDIENCE`; mismatches return 401
+
+Required environment variables (when Supabase auth is enabled):
+
+- `SUPABASE_URL` — e.g., `https://yourproject.supabase.co` (fetches JWKS from `/.well-known/jwks.json`)
+- `SUPABASE_JWT_ISSUER` — **Required** if `SUPABASE_URL` is set; e.g., `https://yourproject.supabase.co`
+- `SUPABASE_JWT_AUDIENCE` — **Required** if `SUPABASE_URL` is set; e.g., `authenticated`
+
+If any of these are required but missing or empty, the application will fail to start with a configuration error. This ensures auth is always properly configured.
+
+Example request with a valid Supabase JWT:
+
+```bash
+curl -X POST http://localhost:8000/chat \
+    -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
+    -H "content-type: application/json" \
+    -d '{"query": "section 54F exemption", "top_k": 5}'
+```
+
+If `SUPABASE_URL` is unset (empty string), token verification is bypassed and all endpoints are public (no authentication required).
 
 ### Observability for retrieval
 
 Retrieval spans are instrumented with Langfuse `@observe` decorators:
 
-- `api-retrieve`
+- `api-chat`
+- `api-chat-stream-route`
 - `retrieval-hybrid`
+- `retrieval-hybrid-async`
 - `retrieval-dense-search`
+- `retrieval-dense-search-async`
 - `retrieval-bm25-search`
 - `retrieval-bm25-load-index`
 - `retrieval-rrf-fusion`
@@ -228,7 +278,7 @@ Supported chunking strategies:
 
 ### HF inference parallel ingestion knobs
 
-When `EMBEDDING_LOCAL_MODE=hf_inference`, embed/upsert phases can run with bounded source-level concurrency.
+When `EMBEDDING_PROVIDER=sentence_transformer`, embed/upsert phases run via HF Inference with bounded source-level concurrency.
 
 - `INGESTION_MAX_WORKERS` (default `2`) source worker threads
 - `HF_MAX_PARALLEL_SOURCES` (default `2`) hard cap for source workers in HF mode
@@ -288,14 +338,6 @@ Metrics computed via RAGAS:
 - answer relevancy
 
 Each run writes local artifacts under `data/eval/results/` and emits Langfuse traces for eval orchestration and sample-level generation.
-
-## Roadmap
-
-- [x] Week 3: Basic ingestion pipeline working
-- [ ] Week 4: Hybrid retrieval + reranking
-- [ ] Week 4: First 30 Q/A eval pairs hand-labeled
-- [ ] Week 7: FastAPI + SSE streaming + deploy
-- [ ] Week 8: Full eval suite (100+ pairs), 3 experiments documented
 
 ## Lessons learned (will fill in as I go)
 
