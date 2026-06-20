@@ -95,3 +95,4 @@ langfuse/*
 *ts.txt
 freeze.txt
 debug.ipynb
+docker-compose.local.yml

@@ -104,7 +104,7 @@ class ChatService:
 		if faithfulness is not None:
 			yield ChatStreamEvent(event="faithfulness", faithfulness=faithfulness)
 
-	@observe(name="api-query-rewrite", as_type="generation", capture_input=False, capture_output=False)
+	@observe(name="api-query-rewrite", as_type="generation", capture_input=True, capture_output=False)
 	async def _rewrite_query_async(self, *, query: str) -> str:
 		"""Rewrite user query for retrieval while preserving legal semantics.
 
@@ -128,7 +128,7 @@ class ChatService:
 	@observe(
 		name="api-faithfulness-check",
 		as_type="generation",
-		capture_input=False,
+		capture_input=True,
 		capture_output=False,
 	)
 	async def _check_faithfulness_async(
