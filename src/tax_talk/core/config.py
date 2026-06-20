@@ -97,6 +97,9 @@ class Settings(BaseSettings):
     # === App config ===
     env: str = "development"
     log_level: str = "INFO"
+    
+    #=== Supabase ===
+    supabase_url: str = ""
     supabase_jwt_issuer: str = ""
     supabase_jwt_audience: str = ""
 

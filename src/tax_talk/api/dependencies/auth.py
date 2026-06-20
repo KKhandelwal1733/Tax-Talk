@@ -2,77 +2,116 @@
 
 from __future__ import annotations
 
-import base64
-import json
-from datetime import UTC, datetime
+from functools import lru_cache
 
-from fastapi import Depends, HTTPException
+import jwt
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt import PyJWKClient
 
 from tax_talk.core.config import settings
 
-_scheme = HTTPBearer(auto_error=False)
-_credentials_dependency = Depends(_scheme)
+security = HTTPBearer(auto_error=False)
+_credentials_dependency = Depends(security)
 
 
-def _decode_jwt_payload(token: str) -> dict:
-    """Decode JWT payload without signature validation for lightweight auth checks."""
-    parts = token.split(".")
-    if len(parts) != 3:
-        raise ValueError("Invalid JWT format")
-
-    payload_segment = parts[1]
-    padding = "=" * (-len(payload_segment) % 4)
-    raw = base64.urlsafe_b64decode(payload_segment + padding)
-    payload = json.loads(raw.decode("utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError("JWT payload must be an object")
-    return payload
+@lru_cache(maxsize=1)
+def get_jwks_client() -> PyJWKClient:
+    """Get cached JWKS client for Supabase JWT signature verification."""
+    jwks_url = f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
+    return PyJWKClient(jwks_url)
 
 
-def _validate_lightweight_claims(payload: dict) -> None:
-    """Validate lightweight JWT claims configured for API auth checks."""
-    exp = payload.get("exp")
-    if exp is not None:
-        if not isinstance(exp, int | float):
-            raise ValueError("JWT exp claim must be numeric")
-        if datetime.now(UTC).timestamp() >= float(exp):
-            raise ValueError("JWT token is expired")
+def verify_supabase_token(token: str) -> dict:
+    """Verify and decode a Supabase JWT with full signature validation.
+    
+    Args:
+        token: Bearer token string to verify.
+        
+    Returns:
+        Decoded JWT payload as dict.
+        
+    Raises:
+        HTTPException: On expired, malformed, or invalid signature.
+    """
+    try:
+        signing_key = get_jwks_client().get_signing_key_from_jwt(token)
 
-    expected_issuer = settings.supabase_jwt_issuer.strip()
-    if expected_issuer:
-        if payload.get("iss") != expected_issuer:
-            raise ValueError("JWT issuer claim is invalid")
+        payload = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=settings.supabase_jwt_audience,
+            issuer=settings.supabase_jwt_issuer,
+        )
 
-    expected_audience = settings.supabase_jwt_audience.strip()
-    if expected_audience:
-        audience = payload.get("aud")
-        if isinstance(audience, str):
-            valid_audience = audience == expected_audience
-        elif isinstance(audience, list):
-            valid_audience = expected_audience in audience
-        else:
-            valid_audience = False
-        if not valid_audience:
-            raise ValueError("JWT audience claim is invalid")
+        return payload
+
+    except jwt.ExpiredSignatureError as err:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expired",
+        ) from err
+
+    except jwt.InvalidTokenError as err:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        ) from err
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = _credentials_dependency,
 ) -> dict:
-    """Return minimal current user claims extracted from a Supabase JWT bearer token."""
-    if credentials is None or not credentials.credentials:
-        raise HTTPException(status_code=401, detail="Missing bearer token")
+    """Extract and verify current user from Supabase JWT bearer token.
+    
+    Args:
+        credentials: HTTPBearer credentials from request.
+        
+    Returns:
+        User info dict with user_id, email, role, and full claims.
+        
+    Raises:
+        HTTPException: 401 if token missing or invalid.
+    """
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
 
-    token = credentials.credentials
-    try:
-        payload = _decode_jwt_payload(token)
-        _validate_lightweight_claims(payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=401, detail="Invalid bearer token") from exc
+    payload = verify_supabase_token(credentials.credentials)
 
     return {
-        "sub": payload.get("sub", ""),
-        "role": payload.get("role", ""),
-        "raw_claims": payload,
+        "user_id": payload.get("sub"),
+        "email": payload.get("email"),
+        "role": payload.get("role"),
+        "claims": payload,
     }
+
+
+async def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = _credentials_dependency,
+) -> dict | None:
+    """Extract and verify current user, but return None if token is missing or invalid.
+    
+    Args:
+        credentials: HTTPBearer credentials from request.
+        
+    Returns:
+        User info dict, or None if no valid token.
+    """
+    if credentials is None:
+        return None
+
+    try:
+        payload = verify_supabase_token(credentials.credentials)
+
+        return {
+            "user_id": payload.get("sub"),
+            "email": payload.get("email"),
+            "role": payload.get("role"),
+            "claims": payload,
+        }
+    except HTTPException:
+        return None
