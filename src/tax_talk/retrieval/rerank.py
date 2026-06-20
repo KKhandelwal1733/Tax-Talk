@@ -70,7 +70,7 @@ def cohere_rerank_candidates(
             continue
 
         row = dict(candidates[candidate_idx])
-        if isinstance(relevance_score, (int, float)): # noqa: UP038
+        if isinstance(relevance_score, (int, float)):  # noqa: UP038
             row["rerank_score"] = float(relevance_score)
         row["rerank_rank"] = rerank_rank
         selected.append(row)

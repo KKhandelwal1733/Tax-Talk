@@ -24,13 +24,13 @@ def get_jwks_client() -> PyJWKClient:
 
 def verify_supabase_token(token: str) -> dict:
     """Verify and decode a Supabase JWT with full signature validation.
-    
+
     Args:
         token: Bearer token string to verify.
-        
+
     Returns:
         Decoded JWT payload as dict.
-        
+
     Raises:
         HTTPException: On expired, malformed, or invalid signature.
     """
@@ -65,13 +65,13 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = _credentials_dependency,
 ) -> dict:
     """Extract and verify current user from Supabase JWT bearer token.
-    
+
     Args:
         credentials: HTTPBearer credentials from request.
-        
+
     Returns:
         User info dict with user_id, email, role, and full claims.
-        
+
     Raises:
         HTTPException: 401 if token missing or invalid.
     """
@@ -95,10 +95,10 @@ async def get_optional_user(
     credentials: HTTPAuthorizationCredentials | None = _credentials_dependency,
 ) -> dict | None:
     """Extract and verify current user, but return None if token is missing or invalid.
-    
+
     Args:
         credentials: HTTPBearer credentials from request.
-        
+
     Returns:
         User info dict, or None if no valid token.
     """

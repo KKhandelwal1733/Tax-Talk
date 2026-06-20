@@ -49,7 +49,7 @@ class LocalEmbeddingStrategy(EmbeddingStrategy):
             raise ValueError("HF inference returned empty embeddings payload.")
 
         first = result[0]
-        if isinstance(first, (int, float)): # noqa: UP038
+        if isinstance(first, (int, float)):  # noqa: UP038
             return [[float(v) for v in result]]
 
         vectors: list[list[float]] = []
