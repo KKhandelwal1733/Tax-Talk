@@ -18,7 +18,7 @@ _credentials_dependency = Depends(security)
 @lru_cache(maxsize=1)
 def get_jwks_client() -> PyJWKClient:
     """Get cached JWKS client for Supabase JWT signature verification."""
-    jwks_url = f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
+    jwks_url = f"{settings.supabase_url.strip()}/auth/v1/.well-known/jwks.json"
     return PyJWKClient(jwks_url)
 
 
@@ -34,13 +34,14 @@ def verify_supabase_token(token: str) -> dict:
     Raises:
         HTTPException: On expired, malformed, or invalid signature.
     """
+    token = token.strip()
     try:
         signing_key = get_jwks_client().get_signing_key_from_jwt(token)
 
         payload = jwt.decode(
             token,
             signing_key.key,
-            algorithms=["RS256"],
+            algorithms=["ES256"],
             audience=settings.supabase_jwt_audience,
             issuer=settings.supabase_jwt_issuer,
         )
