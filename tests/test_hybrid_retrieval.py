@@ -244,3 +244,30 @@ def test_retrieval_fallback_when_cohere_rerank_errors(monkeypatch) -> None:
     assert len(results) == 2
     assert results[0]["chunk_id"] == "c1"
     assert "rerank_score" not in results[0]
+
+
+@pytest.mark.asyncio
+async def test_bm25_search_async_matches_sync_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    payloads = [
+        {"chunk_id": "c1", "text": "section 54f exemption details", "doc_type": "act"},
+    ]
+    retriever = HybridRetriever(store=DummyStore(payloads=payloads, dense_hits=[]))
+
+    def _fake_bm25_search(
+        *,
+        query: str,
+        top_k: int,
+        filters: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        _ = (query, top_k, filters)
+        return [{"chunk_id": "c1", "bm25_score": 0.5, "bm25_rank": 0}]
+
+    monkeypatch.setattr(retriever, "_bm25_search", _fake_bm25_search)
+
+    result = await retriever._bm25_search_async(
+        query="section 54f",
+        top_k=1,
+        filters=None,
+    )
+
+    assert result == [{"chunk_id": "c1", "bm25_score": 0.5, "bm25_rank": 0}]

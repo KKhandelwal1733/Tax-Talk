@@ -7,6 +7,7 @@ Run with: make ingest
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -25,7 +26,7 @@ from tax_talk.ingestion.chunker import (
 )
 from tax_talk.ingestion.embeddings import (
     EmbeddingManifest,
-    embed_texts,
+    embed_texts_async,
     read_embedding_manifest,
     read_embeddings_npy,
     write_embedding_manifest,
@@ -80,11 +81,12 @@ def _artifact_paths(chunking_strategy: str, source_key: str) -> tuple[Path, Path
 def _delete_stage_artifacts(chunking_strategy: str, source_key: str, from_stage: Stage) -> None:
     chunks_path, embeddings_path, manifest_path = _artifact_paths(chunking_strategy, source_key)
 
-    paths: list[Path] = []
     if from_stage == "chunk":
-        paths = [chunks_path, embeddings_path, manifest_path]
+        paths = (chunks_path, embeddings_path, manifest_path)
     elif from_stage == "embed":
-        paths = [embeddings_path, manifest_path]
+        paths = (embeddings_path, manifest_path)
+    else:
+        paths = ()
 
     for path in paths:
         if path.exists():
@@ -199,7 +201,7 @@ def run_ingestion(
     max_workers = 1
     if active_source_keys and (should_embed or should_upsert):
         configured_workers = max(1, settings.ingestion_max_workers)
-        if settings.embedding_local_mode.lower().strip() == "hf_inference":
+        if settings.embedding_provider.lower().strip() == "sentence_transformer":
             configured_workers = min(configured_workers, max(1, settings.hf_max_parallel_sources))
         max_workers = min(configured_workers, len(active_source_keys))
 
@@ -220,18 +222,23 @@ def run_ingestion(
             chunks = read_chunks_jsonl(chunks_path)
 
         if should_embed:
-            vectors: list[list[float]] = []
+            async def embed_batches() -> list[list[float]]:
+                """Embed all chunks asynchronously in batches."""
+                vectors: list[list[float]] = []
+                for batch_start in range(0, len(chunks), INGEST_BATCH_SIZE):
+                    batch = chunks[batch_start : batch_start + INGEST_BATCH_SIZE]
+                    log.info(
+                        "  [%s] embed batch %d-%d of %d",
+                        source_key,
+                        batch_start + 1,
+                        batch_start + len(batch),
+                        len(chunks),
+                    )
+                    batch_vectors = await embed_texts_async([c.text for c in batch])
+                    vectors.extend(batch_vectors)
+                return vectors
 
-            for batch_start in range(0, len(chunks), INGEST_BATCH_SIZE):
-                batch = chunks[batch_start : batch_start + INGEST_BATCH_SIZE]
-                log.info(
-                    "  [%s] embed batch %d-%d of %d",
-                    source_key,
-                    batch_start + 1,
-                    batch_start + len(batch),
-                    len(chunks),
-                )
-                vectors.extend(embed_texts([c.text for c in batch]))
+            vectors = asyncio.run(embed_batches())
 
             write_embeddings_npy(vectors, embeddings_path)
             write_embedding_manifest(
@@ -299,8 +306,7 @@ def run_ingestion(
     else:
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ingest") as executor:
             futures = {
-                executor.submit(process_source, source_key): source_key
-                for source_key in active_source_keys
+                executor.submit(process_source, source_key): source_key for source_key in active_source_keys
             }
             for future in as_completed(futures):
                 source_key = futures[future]

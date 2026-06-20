@@ -10,7 +10,7 @@ from tax_talk.core.config import settings
 from tax_talk.core.runtime import get_logger
 from tax_talk.ingestion.embedding_strategies.embedding_strategy import EmbeddingStrategy
 from tax_talk.ingestion.embedding_strategies.gemini import GeminiEmbeddingStrategy
-from tax_talk.ingestion.embedding_strategies.sentence_transformer import LocalEmbeddingStrategy
+from tax_talk.ingestion.embedding_strategies.sentence_transformer import HFEmbeddingStrategy
 
 # from tax_talk.ingestion.embedding_strategies.voyage import VoyageEmbeddingStrategy
 
@@ -31,7 +31,7 @@ class StrategySpec:
 _STRATEGY_SPECS: dict[str, StrategySpec] = {
     "sentence_transformer": StrategySpec(
         display_name="sentence-transformers",
-        factory=LocalEmbeddingStrategy,
+        factory=HFEmbeddingStrategy,
         model_setting_attr="embedding_model_sentence_transformer",
     ),
     "gemini": StrategySpec(

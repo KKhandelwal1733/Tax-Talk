@@ -23,9 +23,7 @@ class DummyChatService:
             "citations": [{"chunk_id": "c-1", "text": "dummy text"}],
         }
 
-    async def stream_answer(
-        self, request, *, current_user: dict[str, Any]
-    ) -> AsyncIterator[ChatStreamEvent]:
+    async def stream_answer(self, request, *, current_user: dict[str, Any]) -> AsyncIterator[ChatStreamEvent]:
         _ = request
         _ = current_user
         yield ChatStreamEvent(event="token", text="dummy ")
@@ -140,7 +138,7 @@ def test_chat_stream_returns_event_stream(monkeypatch) -> None:
 
 def test_chat_rejects_expired_bearer_token(monkeypatch) -> None:
     from fastapi import HTTPException, status
-
+    
     def mock_verify_expired(token: str) -> dict:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

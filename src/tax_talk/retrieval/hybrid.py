@@ -90,9 +90,7 @@ class HybridRetriever:
 
         return self._cohere_rerank(query=query, candidates=fused, top_k=top_k)
 
-    @observe(
-        name="retrieval-hybrid-async", as_type="retriever", capture_input=True, capture_output=True
-    )
+    @observe(name="retrieval-hybrid-async", as_type="retriever", capture_input=True, capture_output=True)
     async def retrieve_async(
         self,
         query: str,
@@ -102,7 +100,7 @@ class HybridRetriever:
         bm25_top_k: int = 30,
         filters: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        """Return fused retrieval hits via async dense path and sync BM25 offload."""
+        """Return fused retrieval hits via async dense and BM25 paths."""
         if not query.strip():
             return []
         if top_k <= 0:
@@ -115,8 +113,7 @@ class HybridRetriever:
             top_k=max(fusion_top_k, dense_top_k),
             filters=filters,
         )
-        bm25_task = asyncio.to_thread(
-            self._bm25_search,
+        bm25_task = self._bm25_search_async(
             query=query,
             top_k=max(fusion_top_k, bm25_top_k),
             filters=filters,
@@ -132,9 +129,7 @@ class HybridRetriever:
         if not self._rerank_enabled:
             return fused[:top_k]
 
-        return await asyncio.to_thread(
-            self._cohere_rerank, query=query, candidates=fused, top_k=top_k
-        )
+        return await asyncio.to_thread(self._cohere_rerank, query=query, candidates=fused, top_k=top_k)
 
     @observe(
         name="retrieval-cohere-rerank",
@@ -209,6 +204,26 @@ class HybridRetriever:
     ) -> list[dict[str, Any]]:
         self._ensure_bm25_index()
         return self._bm25.search(query=query, top_k=top_k, filters=filters)
+
+    @observe(
+        name="retrieval-bm25-search-async",
+        as_type="span",
+        capture_input=False,
+        capture_output=False,
+    )
+    async def _bm25_search_async(
+        self,
+        *,
+        query: str,
+        top_k: int,
+        filters: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(
+            self._bm25_search,
+            query=query,
+            top_k=top_k,
+            filters=filters,
+        )
 
     def _ensure_bm25_index(self) -> None:
         self._load_bm25_index_locked(force=False)

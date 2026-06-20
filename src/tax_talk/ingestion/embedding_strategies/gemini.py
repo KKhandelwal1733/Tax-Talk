@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 from tax_talk.core.config import settings
@@ -51,6 +52,38 @@ class GeminiEmbeddingStrategy(EmbeddingStrategy):
                         raise
 
             time.sleep(0.05)
+
+        return all_vectors
+
+    async def embed_async(self, texts: list[str]) -> list[list[float]]:
+        """Async embedding using thread pool to avoid blocking."""
+        all_vectors: list[list[float]] = []
+
+        for i in range(0, len(texts), self._MAX_BATCH):
+            batch = texts[i : i + self._MAX_BATCH]
+            for attempt in range(3):
+                try:
+                    result = await asyncio.to_thread(
+                        self._genai.embed_content,
+                        model=self._model,
+                        content=batch,
+                        task_type="retrieval_document",
+                    )
+                    embeddings = result["embedding"]
+                    if isinstance(embeddings[0], float):
+                        embeddings = [embeddings]
+                    all_vectors.extend(embeddings)
+                    break
+                except Exception as e:
+                    if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                        wait = 60 * (attempt + 1)
+                        log.warning("Gemini rate limit hit. Sleeping %ds...", wait)
+                        await asyncio.sleep(wait)
+                    else:
+                        log.error("Gemini embedding error: %s", e)
+                        raise
+
+            await asyncio.sleep(0.05)
 
         return all_vectors
 

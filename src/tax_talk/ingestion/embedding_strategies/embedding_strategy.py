@@ -11,9 +11,19 @@ class EmbeddingStrategy(ABC):
         """Return one vector per text. All vectors same length."""
         raise NotImplementedError
 
+    @abstractmethod
+    async def embed_async(self, texts: list[str]) -> list[list[float]]:
+        """Async version: return one vector per text. All vectors same length."""
+        raise NotImplementedError
+
     def embed_query(self, query: str) -> list[float]:
         """Default query embedding behavior for providers without query/document split."""
         return self.embed([query])[0]
+
+    async def embed_query_async(self, query: str) -> list[float]:
+        """Async query embedding using default behavior."""
+        result = await self.embed_async([query])
+        return result[0]
 
     @property
     @abstractmethod

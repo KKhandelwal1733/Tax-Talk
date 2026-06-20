@@ -1,22 +1,22 @@
 """
 src/tax_talk/ingestion/embeddings.py
 
-Backward-compatible facade over the nested embedding strategy package.
+Async embedding facade over the nested embedding strategy package.
 
 Usage:
-    from tax_talk.ingestion.embeddings import embed_texts, get_embedder
+    from tax_talk.ingestion.embeddings import embed_texts_async, embed_query_async
 
-    # Embed a batch of texts
-    vectors = embed_texts(["GST on free samples?", "TDS under Section 194C"])
+    # Embed a batch of texts asynchronously
+    vectors = await embed_texts_async(["GST on free samples?", "TDS under Section 194C"])
 
-    # Or get the embedder object for reuse
-    embedder = get_embedder()
-    vectors = embedder.embed(["some text"])
+    # Or embed a query
+    vector = await embed_query_async("What is IGST?")
 """
 
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -40,44 +40,26 @@ def _int_stat(stats: dict[str, int], key: str) -> int:
     return value if isinstance(value, int) else 0
 
 
-def _sanitize_text(text: str) -> str:
-    """Replace invalid Unicode surrogates so embedding payloads are JSON-safe."""
-    result = []
-    for char in text:
-        try:
-            # Valid UTF-8 encodable characters pass through
-            char.encode("utf-8")
-            result.append(char)
-        except UnicodeEncodeError:
-            # Unencod able characters (like surrogates) become spaces
-            result.append(" ")
-    return "".join(result)
-
-
 def _normalize_embedding_inputs(texts: list[object]) -> list[str]:
     """Coerce embedding inputs to strings so tokenizer calls are stable."""
     normalized: list[str] = []
-    coerced = 0
 
     for text in texts:
         if isinstance(text, str):
             value = text
         elif isinstance(text, bytes):
             value = text.decode("utf-8", errors="ignore")
-            coerced += 1
         elif text is None:
             value = ""
-            coerced += 1
         else:
             value = str(text)
-            coerced += 1
 
-        value = _sanitize_text(value)
+        # Strip lone surrogates (e.g. \ud835) by round-tripping through UTF-8.
+        value = value.encode("utf-8", errors="surrogatepass").decode("utf-8", errors="replace")
+        value = re.sub("\ufffd+", " ", value)
+
         # Keep cardinality stable for downstream upsert alignment.
-        normalized.append(value if value else " ")
-
-    if coerced:
-        log.warning("Coerced %d non-string embedding inputs to strings.", coerced)
+        normalized.append(value if value.strip() else " ")
 
     return normalized
 
@@ -99,15 +81,15 @@ def _track_embedding_usage(
 def get_embedder() -> EmbeddingStrategy:
     """
     Return the singleton embedder for the configured provider.
-    Call this once at startup; the local model loads only on first call.
+    Call this once at startup; the model loads only on first call.
     """
     return get_embedding_strategy()
 
 
-@observe(name="embed-texts", as_type="embedding", capture_input=False, capture_output=False)
-def embed_texts(texts: list[str]) -> list[list[float]]:
+@observe(name="embed-texts-async", as_type="embedding", capture_input=False, capture_output=False)
+async def embed_texts_async(texts: list[str]) -> list[list[float]]:
     """
-    Convenience wrapper. Embeds texts using the configured provider.
+    Async embedding of texts using the configured provider.
 
     Args:
         texts: list of strings to embed (pass full chunks, not sentence fragments)
@@ -120,7 +102,7 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     safe_texts = _normalize_embedding_inputs(list(texts))
     embedder = get_embedder()
     before = embedder.get_usage_stats()
-    vectors = embedder.embed(safe_texts)
+    vectors = await embedder.embed_async(safe_texts)
     after = embedder.get_usage_stats()
     _track_embedding_usage(
         operation="texts",
@@ -131,16 +113,16 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     return vectors
 
 
-@observe(name="embed-query", as_type="embedding", capture_input=False, capture_output=False)
-def embed_query(query: str) -> list[float]:
+@observe(name="embed-query-async", as_type="embedding", capture_input=False, capture_output=False)
+async def embed_query_async(query: str) -> list[float]:
     """
-    Embed a single query string at retrieval time.
+    Async embed a single query string at retrieval time.
 
-    Uses the selected strategy's query behavior.
+    Uses the selected strategy's async query behavior.
     """
     strategy = get_embedder()
     before = strategy.get_usage_stats()
-    vector = strategy.embed_query(query)
+    vector = await strategy.embed_query_async(query)
     after = strategy.get_usage_stats()
     _track_embedding_usage(
         operation="query",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from math import ceil
 from threading import Lock, Semaphore
@@ -19,7 +20,7 @@ def _sanitize_text(text: str) -> str:
 log = get_logger(__name__)
 
 
-class LocalEmbeddingStrategy(EmbeddingStrategy):
+class HFEmbeddingStrategy(EmbeddingStrategy):
     """Runs sentence-transformer embeddings through HF Inference API."""
 
     def __init__(self, model_name: str = settings.embedding_model_sentence_transformer) -> None:
@@ -27,15 +28,14 @@ class LocalEmbeddingStrategy(EmbeddingStrategy):
         self._embed_calls = 0
         self._texts_embedded = 0
         self._estimated_hf_requests = 0
-        from huggingface_hub import InferenceClient  # lazy import
+        from huggingface_hub import AsyncInferenceClient, InferenceClient  # lazy import
 
         if not settings.hf_token:
-            raise ValueError(
-                "HF_TOKEN not set in .env - required for sentence_transformer embedding."
-            )
+            raise ValueError("HF_TOKEN not set in .env - required for sentence_transformer embedding.")
 
         log.info("Using HF Inference API for embedding model: %s", model_name)
         self._client = InferenceClient(token=settings.hf_token)
+        self._async_client = AsyncInferenceClient(token=settings.hf_token)
         self._model_name = model_name
         self._dim = settings.embedding_dimensions
         self._hf_request_limiter = Semaphore(max(1, settings.hf_max_concurrent_requests))
@@ -49,7 +49,7 @@ class LocalEmbeddingStrategy(EmbeddingStrategy):
             raise ValueError("HF inference returned empty embeddings payload.")
 
         first = result[0]
-        if isinstance(first, (int, float)):  # noqa: UP038
+        if isinstance(first, (int, float)): #noqa UP038
             return [[float(v) for v in result]]
 
         vectors: list[list[float]] = []
@@ -59,7 +59,8 @@ class LocalEmbeddingStrategy(EmbeddingStrategy):
             vectors.append([float(v) for v in row])
         return vectors
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
+    def _normalize_texts(self, texts: list[str]) -> tuple[list[str], int]:
+        """Normalize and sanitize texts, returning cleaned texts and coercion count."""
         safe_texts: list[str] = []
         coerced = 0
         for text in texts:
@@ -76,9 +77,14 @@ class LocalEmbeddingStrategy(EmbeddingStrategy):
                 coerced += 1
 
             safe_texts.append(value if value else " ")
-
+        
         if coerced:
-            log.warning("Coerced %d non-string local embedding inputs.", coerced)
+            log.warning("Coerced %d non-string embedding inputs.", coerced)
+        
+        return safe_texts, coerced
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        safe_texts, coerced = self._normalize_texts(texts)
 
         batch_size = max(1, settings.embedding_batch_size)
         estimated_requests = ceil(len(safe_texts) / batch_size)
@@ -118,6 +124,66 @@ class LocalEmbeddingStrategy(EmbeddingStrategy):
                         backoff,
                     )
                     time.sleep(backoff)
+
+            if response is None:
+                raise RuntimeError("HF embedding request returned no response") from last_error
+            vectors = self._normalize_vectors(response)
+            all_vectors.extend(vectors)
+
+        if all_vectors and len(all_vectors[0]) != self._dim:
+            raise ValueError(
+                f"HF inference embedding dimensions mismatch: got {len(all_vectors[0])}, expected {self._dim}."
+            )
+
+        with self._usage_lock:
+            self._embed_calls += 1
+            self._texts_embedded += len(safe_texts)
+            self._estimated_hf_requests += estimated_requests
+
+        return all_vectors
+
+    async def embed_async(self, texts: list[str]) -> list[list[float]]:
+        """Async embedding using AsyncInferenceClient native async method."""
+        safe_texts, coerced = self._normalize_texts(texts)
+
+        batch_size = max(1, settings.embedding_batch_size)
+        estimated_requests = ceil(len(safe_texts) / batch_size)
+
+        all_vectors: list[list[float]] = []
+        for i in range(0, len(safe_texts), batch_size):
+            batch = safe_texts[i : i + batch_size]
+            response: Any | None = None
+            last_error: Exception | None = None
+            max_attempts = max(1, settings.hf_retry_max_attempts)
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    # Use async method directly - no need to wrap in asyncio.to_thread()
+                    response = await self._async_client.feature_extraction(
+                        text=batch,
+                        model=self._model_name,
+                    )
+                    last_error = None
+                    break
+                except Exception as exc:
+                    last_error = exc
+                    status_code = getattr(getattr(exc, "response", None), "status_code", None)
+                    retryable_status = {429, 500, 502, 503, 504}
+                    should_retry = status_code in retryable_status or status_code is None
+                    if not should_retry or attempt >= max_attempts:
+                        raise
+
+                    backoff = min(
+                        settings.hf_retry_max_delay_seconds,
+                        settings.hf_retry_initial_delay_seconds * (2 ** (attempt - 1)),
+                    )
+                    log.warning(
+                        "HF async embedding request failed (attempt %d/%d, status=%s). Retrying in %.1fs.",
+                        attempt,
+                        max_attempts,
+                        status_code,
+                        backoff,
+                    )
+                    await asyncio.sleep(backoff)
 
             if response is None:
                 raise RuntimeError("HF embedding request returned no response") from last_error
