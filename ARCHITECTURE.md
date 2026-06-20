@@ -9,6 +9,12 @@ User question
     │
     ▼
 ┌─────────────────────────────────────────────┐
+│ Query rewrite (always-on)                  │
+│  • LLM rewrite for retrieval clarity        │
+│  • preserves legal entities and section refs│
+└─────────────────┬───────────────────────────┘
+                  ▼
+┌─────────────────────────────────────────────┐
 │ Hybrid retrieval                            │
 │  • BM25 over chunks  (rank_bm25)            │
 │  • Dense over chunks (Qdrant + configured emb)│
@@ -29,21 +35,22 @@ User question
 │  • POST /chat returns grounded answer + cites│
 │  • POST /chat/stream streams SSE events      │
 │    (event/id/data contract)                  │
+│  • optional terminal faithfulness event      │
 │  • GET /health/live and /health/ready        │
 └─────────────────┬───────────────────────────┘
                   ▼
         Grounded answer + citations
 
-Langfuse tracing is implemented for API + retrieval spans.
+Langfuse tracing is implemented for API + retrieval spans, including query rewrite and faithfulness checks.
 ```
 
-## Planned flow (not fully implemented yet)
+## Optional runtime stage
 
 ```
-[Query rewrite / HyDE] -> [Hybrid retrieval + rerank] -> [Answer generation + citations] -> [Faithfulness judge]
+[Faithfulness judge] (enabled via settings) -> optional sync payload / stream terminal event
 ```
 
-Planned stages above are roadmap items and should not be presented as production-complete.
+Faithfulness checks are optional for runtime serving and remain enabled by configuration.
 
 ## Decisions log
 

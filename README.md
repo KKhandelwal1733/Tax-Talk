@@ -39,17 +39,17 @@ Architecture diagram: see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 | Layer | Choice | Why |
 |---|---|---|
-| Embeddings | Local `BAAI/bge-base-en-v1.5` / Gemini `text-embedding-004` | No-card path; strong quality with portable setup |
+| Embeddings | Local `BAAI/bge-m3` / Gemini `text-embedding-004` | No-card path; strong quality with portable setup |
 | Vector DB | Qdrant (self-hosted) | Open-source, supports binary quantization |
 | Sparse retrieval | BM25 (rank_bm25) | Catches exact section numbers and statute references |
 | Fusion | Reciprocal Rank Fusion | Robust combination of sparse + dense |
 | Reranker | Cohere Rerank v4 | Optional post-RRF semantic reranking |
-| Generation | Gemini 2.0 Flash / Groq Llama 3.3 70B | Fast, no-card friendly model strategy |
+| Generation | Gemini 3.5 Flash / Groq Llama 3.3 70B | Fast, no-card friendly model strategy |
 | Orchestration | LangChain (retrieval) + Pydantic AI (generation) | Type-safe outputs |
 | Observability | Langfuse Cloud | Free tier, captures all traces and costs |
 | API | FastAPI + SSE streaming | Production-standard |
 | Eval framework | RAGAS + custom LLM-as-judge | Faithfulness, context relevance, citation accuracy |
-| Hosting | Azure VM (B1S, Central India) + Vercel frontend | Free via Azure for Students |
+| Hosting | Azure VM (B1S, Central India) + Streamlit frontend | Free via Azure for Students |
 
 ### Embedding execution
 
@@ -73,20 +73,14 @@ Corpus license/copyright: All statutes are public domain. Notifications and circ
 See [EVALS.md](./EVALS.md) for the full eval harness, metrics, and current scores.
 
 Current snapshot (will update weekly):
-- Faithfulness (LLM-as-judge): _TBD_
-- Context precision: _TBD_
-- Context recall: _TBD_
-- Citation accuracy: _TBD_
-- Avg latency p95: _TBD_
-- Avg cost per query: _TBD_
-
-## Costs
-
-See [COSTS.md](./COSTS.md) for token-level cost breakdown and optimization choices.
+- Faithfulness (LLM-as-judge): 0.9058775374951844
+- Context precision: 0.8429292928594947
+- Context recall: 0.803030303030303
+- Citation accuracy: 0.5305352920780899
 
 ## Live demo
 
-[domain-oracle.yourname.me](https://domain-oracle.yourname.me) — coming after week 7.
+[domain-oracle.yourname.me](https://domain-oracle.yourname.me) — Not yet.
 
 ## Local development
 
