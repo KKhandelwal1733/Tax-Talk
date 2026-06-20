@@ -42,13 +42,4 @@ jobs:
         continue-on-error: true
 
       - name: Run tests
-        env:
-    
-          HF_TOKEN: "ci_placeholder_token" 
-          LANGFUSE_ENABLED: "false"
-          LANGFUSE_PUBLIC_KEY: "pk-lf-mock"
-          LANGFUSE_SECRET_KEY: "sk-lf-mock"
-          LANGFUSE_HOST: "https://cloud.langfuse.com"
-          SUPABASE_URL: "https://mock.supabase.co"
-          SUPABASE_JWT_AUDIENCE: "authenticated"
         run: uv run pytest -v
