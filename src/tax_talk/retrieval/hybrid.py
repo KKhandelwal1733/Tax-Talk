@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from langfuse import observe
@@ -9,7 +10,7 @@ from tax_talk.core.config import settings
 from tax_talk.core.runtime import get_cohere_client, get_logger
 from tax_talk.ingestion.qdrant_store import QdrantStore
 from tax_talk.retrieval.bm25_index import Bm25Searcher
-from tax_talk.retrieval.dense_search import run_dense_search
+from tax_talk.retrieval.dense_search import run_dense_search, run_dense_search_async
 from tax_talk.retrieval.helpers.fusion import reciprocal_rank_fusion
 from tax_talk.retrieval.rerank import cohere_rerank_candidates
 
@@ -90,6 +91,52 @@ class HybridRetriever:
         return self._cohere_rerank(query=query, candidates=fused, top_k=top_k)
 
     @observe(
+        name="retrieval-hybrid-async", as_type="retriever", capture_input=True, capture_output=True
+    )
+    async def retrieve_async(
+        self,
+        query: str,
+        *,
+        top_k: int = 10,
+        dense_top_k: int = 30,
+        bm25_top_k: int = 30,
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return fused retrieval hits via async dense path and sync BM25 offload."""
+        if not query.strip():
+            return []
+        if top_k <= 0:
+            return []
+
+        fusion_top_k = max(top_k, self._rerank_top_k) if self._rerank_enabled else top_k
+
+        dense_task = self._dense_search_async(
+            query=query,
+            top_k=max(fusion_top_k, dense_top_k),
+            filters=filters,
+        )
+        bm25_task = asyncio.to_thread(
+            self._bm25_search,
+            query=query,
+            top_k=max(fusion_top_k, bm25_top_k),
+            filters=filters,
+        )
+        dense_hits, bm25_hits = await asyncio.gather(dense_task, bm25_task)
+
+        fused = self._reciprocal_rank_fusion(
+            ranked_lists=[dense_hits, bm25_hits],
+            weights=[self._dense_weight, self._bm25_weight],
+            top_k=fusion_top_k,
+        )
+
+        if not self._rerank_enabled:
+            return fused[:top_k]
+
+        return await asyncio.to_thread(
+            self._cohere_rerank, query=query, candidates=fused, top_k=top_k
+        )
+
+    @observe(
         name="retrieval-cohere-rerank",
         as_type="retriever",
         capture_input=False,
@@ -129,6 +176,26 @@ class HybridRetriever:
         filters: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:
         return run_dense_search(store=self._store, query=query, top_k=top_k, filters=filters)
+
+    @observe(
+        name="retrieval-dense-search-async",
+        as_type="span",
+        capture_input=False,
+        capture_output=False,
+    )
+    async def _dense_search_async(
+        self,
+        *,
+        query: str,
+        top_k: int,
+        filters: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        return await run_dense_search_async(
+            store=self._store,
+            query=query,
+            top_k=top_k,
+            filters=filters,
+        )
 
     @observe(
         name="retrieval-bm25-search", as_type="span", capture_input=False, capture_output=False

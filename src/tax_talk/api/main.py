@@ -2,53 +2,52 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 
-from langfuse import observe
-from tax_talk.core.runtime import get_logger
-from tax_talk.models.api import HealthResponse, RetrieveRequest, RetrieveResponse
-from tax_talk.retrieval import HybridRetriever
+from tax_talk.api.endpoints.chat import router as chat_router
+from tax_talk.api.endpoints.health import router as health_router
+from tax_talk.api.middleware.observability import ObservabilityMiddleware
+from tax_talk.core.runtime import (
+    close_gemini_client,
+    flush_langfuse_client,
+    get_logger,
+    get_qdrant_client,
+)
 
 log = get_logger(__name__)
 
 
-app = FastAPI(title="tax-talk API", version="0.1.0")
-
-
-@lru_cache(maxsize=1)
-def _get_retriever() -> HybridRetriever:
-    """Build and cache the retriever instance used by API requests."""
-    return HybridRetriever()
-
-
-@observe(name="api-health", as_type="span", capture_input=False)
-@app.get("/health", response_model=HealthResponse, tags=["health"])
-def health() -> HealthResponse:
-    """Return simple API health status."""
-    return HealthResponse()
-
-
-@observe(name="api-retrieve", as_type="span", capture_input=True, capture_output=False)
-@app.post("/retrieve", response_model=RetrieveResponse, tags=["retrieval"])
-def retrieve(payload: RetrieveRequest) -> RetrieveResponse:
-    """Return hybrid retrieval hits for a query."""
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Warm lightweight shared clients at startup."""
     try:
-        hits = _get_retriever().retrieve(
-            payload.query,
-            top_k=payload.top_k,
-            dense_top_k=payload.dense_top_k,
-            bm25_top_k=payload.bm25_top_k,
-            filters=payload.filters,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:  # pragma: no cover - defensive boundary
-        log.exception("Retrieval failed for API request.")
-        raise HTTPException(status_code=500, detail="retrieval failed") from exc
+        get_qdrant_client()
+    except Exception as exc:  # pragma: no cover
+        log.warning("Qdrant warmup skipped: %s", exc)
+    yield
+    try:
+        flush_langfuse_client()
+    except Exception as exc:  # pragma: no cover
+        log.warning("Langfuse flush skipped: %s", exc)
+    try:
+        await close_gemini_client()
+    except Exception as exc:  # pragma: no cover
+        log.warning("Gemini client close skipped: %s", exc)
 
-    return RetrieveResponse(hits=hits)
+
+def create_app() -> FastAPI:
+    """Build and configure the FastAPI application."""
+    app = FastAPI(title="tax-talk API", version="0.3.2", lifespan=lifespan)
+    app.add_middleware(ObservabilityMiddleware)
+    app.include_router(health_router)
+    app.include_router(chat_router)
+    return app
+
+
+app = create_app()
 
 
 def main() -> None:

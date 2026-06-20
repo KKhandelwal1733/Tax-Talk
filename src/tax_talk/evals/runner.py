@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ragas import EvaluationDataset, RunConfig, SingleTurnSample, evaluate
-from ragas.metrics.collections import (
+from ragas.metrics import (
     AnswerCorrectness,
     ContextPrecision,
     ContextRecall,
@@ -90,7 +90,9 @@ def _parse_fallback_chain(csv: str) -> list[tuple[str, str]]:
         provider, model = entry.split("/", 1)
         provider, model = provider.strip().lower(), model.strip()
         if provider not in _VALID_PROVIDERS:
-            raise ValueError(f"Unknown provider '{provider}'. Supported: {sorted(_VALID_PROVIDERS)}")
+            raise ValueError(
+                f"Unknown provider '{provider}'. Supported: {sorted(_VALID_PROVIDERS)}"
+            )
         if not model:
             raise ValueError(f"Empty model name in fallback entry '{entry}'.")
         pairs.append((provider, model))
@@ -112,6 +114,7 @@ def _p95(latencies: list[float]) -> float:
 @dataclass
 class EvalRow:
     """Per-sample payload: retrieval output before RAGAS scoring."""
+
     id: str
     question: str
     answer: str
@@ -154,7 +157,7 @@ def _build_ragas_evaluators() -> list[tuple[Any, Any]]:
     all_attempts = [
         (primary_provider, primary_model),
         *fallback_chain,
-        ]
+    ]
 
     # --- Embeddings (always Gemini) ---
     gemini_attempts = [(p, m) for p, m in all_attempts if p == "gemini"]
@@ -217,15 +220,22 @@ def _reset_ragas_evaluators() -> None:
 # ---------------------------------------------------------------------------
 
 
-@observe(name="eval-generate-answer", as_type="generation", capture_input=False, capture_output=False)
+@observe(
+    name="eval-generate-answer", as_type="generation", capture_input=False, capture_output=False
+)
 def _generate_grounded_answer(
-    *, question: str, contexts: list[str], provider: str, model: str,
+    *,
+    question: str,
+    contexts: list[str],
+    provider: str,
+    model: str,
     fallback_chain: list[tuple[str, str]] | None = None,
 ) -> str:
     """Generate a grounded answer from retrieved contexts, with provider fallbacks."""
     attempts = [(provider, model)] + (fallback_chain or [])
     prompt = _ANSWER_PROMPT_TEMPLATE.format(
-        question=question, context="\n\n".join(contexts[:8]),
+        question=question,
+        context="\n\n".join(contexts[:8]),
     )
     failures: list[str] = []
     for idx, (prov, mod) in enumerate(attempts):
@@ -233,19 +243,40 @@ def _generate_grounded_answer(
             _eval_answer_rate_limiter.wait_for_slot()
             response = get_llm_strategy(prov).generate(prompt=prompt, model=mod)
             if idx > 0:
-                log.info("eval-generate-answer: succeeded on fallback %d/%d (%s/%s)", idx + 1, len(attempts), prov, mod)
+                log.info(
+                    "eval-generate-answer: succeeded on fallback %d/%d (%s/%s)",
+                    idx + 1,
+                    len(attempts),
+                    prov,
+                    mod,
+                )
             return response.strip() if isinstance(response, str) else ""
         except Exception as exc:
             failures.append(f"attempt {idx + 1} ({prov}/{mod}): {exc}")
-            log.warning("eval-generate-answer: attempt %d/%d failed (%s/%s): %s", idx + 1, len(attempts), prov, mod, exc)
-    raise RuntimeError(f"All {len(attempts)} eval generation attempt(s) failed. " + "; ".join(failures))
+            log.warning(
+                "eval-generate-answer: attempt %d/%d failed (%s/%s): %s",
+                idx + 1,
+                len(attempts),
+                prov,
+                mod,
+                exc,
+            )
+    raise RuntimeError(
+        f"All {len(attempts)} eval generation attempt(s) failed. " + "; ".join(failures)
+    )
 
 
 @observe(name="eval-build-rows", as_type="span", capture_input=False, capture_output=False)
 def build_eval_rows(
-    *, samples: list[GoldenQASample], retriever: HybridRetriever,
-    provider: str, model: str, collection: str, chunking_strategy: str,
-    top_k: int, fallback_chain: list[tuple[str, str]] | None = None,
+    *,
+    samples: list[GoldenQASample],
+    retriever: HybridRetriever,
+    provider: str,
+    model: str,
+    collection: str,
+    chunking_strategy: str,
+    top_k: int,
+    fallback_chain: list[tuple[str, str]] | None = None,
 ) -> list[EvalRow]:
     """Run retrieval+generation for each sample and return EvalRows."""
     rows: list[EvalRow] = []
@@ -254,33 +285,59 @@ def build_eval_rows(
         hits = retriever.retrieve(sample.question, top_k=top_k)
         contexts = [str(h.get("text", "")).strip() for h in hits if h.get("text")]
         answer = _generate_grounded_answer(
-            question=sample.question, contexts=contexts,
-            provider=provider, model=model, fallback_chain=fallback_chain,
+            question=sample.question,
+            contexts=contexts,
+            provider=provider,
+            model=model,
+            fallback_chain=fallback_chain,
         )
-        rows.append(EvalRow(
-            id=sample.id, question=sample.question, answer=answer, contexts=contexts,
-            ground_truth=sample.expected_answer, collection=collection,
-            chunking_strategy=chunking_strategy, latency_ms=(time.perf_counter() - started) * 1000.0,
-        ))
+        rows.append(
+            EvalRow(
+                id=sample.id,
+                question=sample.question,
+                answer=answer,
+                contexts=contexts,
+                ground_truth=sample.expected_answer,
+                collection=collection,
+                chunking_strategy=chunking_strategy,
+                latency_ms=(time.perf_counter() - started) * 1000.0,
+            )
+        )
     return rows
 
 
 @observe(name="eval-dump-rows", as_type="span", capture_input=False, capture_output=False)
 def dump_retrieval_rows(
-    *, samples: list[GoldenQASample], retriever: HybridRetriever,
-    provider: str, model: str, collection: str, chunking_strategy: str,
-    top_k: int, output_dir: Path, fallback_chain: list[tuple[str, str]] | None = None,
+    *,
+    samples: list[GoldenQASample],
+    retriever: HybridRetriever,
+    provider: str,
+    model: str,
+    collection: str,
+    chunking_strategy: str,
+    top_k: int,
+    output_dir: Path,
+    fallback_chain: list[tuple[str, str]] | None = None,
 ) -> Path:
     """Run retrieval+generation and persist raw rows to JSONL."""
     rows = build_eval_rows(
-        samples=samples, retriever=retriever, provider=provider, model=model,
-        collection=collection, chunking_strategy=chunking_strategy,
-        top_k=top_k, fallback_chain=fallback_chain,
+        samples=samples,
+        retriever=retriever,
+        provider=provider,
+        model=model,
+        collection=collection,
+        chunking_strategy=chunking_strategy,
+        top_k=top_k,
+        fallback_chain=fallback_chain,
     )
     output_dir.mkdir(parents=True, exist_ok=True)
-    dump_path = output_dir / f"retrieval-{chunking_strategy}-{collection}-{time.strftime('%Y%m%d-%H%M%S')}.jsonl"
+    dump_path = (
+        output_dir
+        / f"retrieval-{chunking_strategy}-{collection}-{time.strftime('%Y%m%d-%H%M%S')}.jsonl"
+    )
     dump_path.write_text(
-        "\n".join(json.dumps(asdict(r)) for r in rows) + "\n", encoding="utf-8",
+        "\n".join(json.dumps(asdict(r)) for r in rows) + "\n",
+        encoding="utf-8",
     )
     get_langfuse_client().flush()
     log.info("Wrote retrieval dump (%d rows): %s", len(rows), dump_path)
@@ -306,19 +363,26 @@ def _build_metrics(llm: Any, embeddings: Any) -> list:
 
 
 def _score_batch(
-    batch: list[EvalRow], evaluators: list[tuple[Any, Any]], run_config: RunConfig,
+    batch: list[EvalRow],
+    evaluators: list[tuple[Any, Any]],
+    run_config: RunConfig,
 ) -> Any:
     """Score a single batch, falling back through evaluator candidates on failure.
 
     Raises:
         RuntimeError: If all evaluators fail for this batch.
     """
-    dataset = EvaluationDataset(samples=[
-        SingleTurnSample(
-            user_input=r.question, response=r.answer,
-            retrieved_contexts=r.contexts, reference=r.ground_truth,
-        ) for r in batch
-    ])
+    dataset = EvaluationDataset(
+        samples=[
+            SingleTurnSample(
+                user_input=r.question,
+                response=r.answer,
+                retrieved_contexts=r.contexts,
+                reference=r.ground_truth,
+            )
+            for r in batch
+        ]
+    )
     last_exc: Exception | None = None
     for idx, (llm, embeddings) in enumerate(evaluators):
         try:
@@ -329,18 +393,26 @@ def _score_batch(
             )
         except Exception as exc:
             last_exc = exc
-            log.warning("RAGAS scoring failed with evaluator %d/%d: %s", idx + 1, len(evaluators), exc)
-    raise RuntimeError(f"All {len(evaluators)} RAGAS evaluator(s) failed for batch. Last: {last_exc}")
+            log.warning(
+                "RAGAS scoring failed with evaluator %d/%d: %s", idx + 1, len(evaluators), exc
+            )
+    raise RuntimeError(
+        f"All {len(evaluators)} RAGAS evaluator(s) failed for batch. Last: {last_exc}"
+    )
 
 
 _FAILED_SENTINEL: dict[str, float | None] = {
-    "faithfulness": None, "context_precision": None,
-    "context_recall": None, "answer_correctness": None,
+    "faithfulness": None,
+    "context_precision": None,
+    "context_recall": None,
+    "answer_correctness": None,
 }
 
 
 @observe(name="eval-ragas", as_type="span", capture_input=False, capture_output=False)
-def compute_ragas_scores(rows: list[EvalRow]) -> tuple[dict[str, float], list[dict[str, Any]], list[str]]:
+def compute_ragas_scores(
+    rows: list[EvalRow],
+) -> tuple[dict[str, float], list[dict[str, Any]], list[str]]:
     """Compute RAGAS metrics with evaluator fallback and graceful batch failure.
 
     Returns:
@@ -356,7 +428,12 @@ def compute_ragas_scores(rows: list[EvalRow]) -> tuple[dict[str, float], list[di
 
     for batch_idx, start in enumerate(range(0, len(rows), _RAGAS_BATCH_SIZE)):
         if batch_idx > 0:
-            log.info("Rate limit pause: sleeping %ds before batch %d/%d ...", _RAGAS_BATCH_SLEEP_SECONDS, batch_idx + 1, total_batches)
+            log.info(
+                "Rate limit pause: sleeping %ds before batch %d/%d ...",
+                _RAGAS_BATCH_SLEEP_SECONDS,
+                batch_idx + 1,
+                total_batches,
+            )
             time.sleep(_RAGAS_BATCH_SLEEP_SECONDS)
 
         batch = rows[start : start + _RAGAS_BATCH_SIZE]
@@ -375,11 +452,18 @@ def compute_ragas_scores(rows: list[EvalRow]) -> tuple[dict[str, float], list[di
             failed_sample_ids.extend(batch_ids)
             for r in batch:
                 all_row_metrics.append({"id": r.id, "status": "scoring_failed", **_FAILED_SENTINEL})
-            log.error("Batch %d/%d FAILED — all evaluators exhausted. Skipping samples: %s", batch_idx + 1, total_batches, batch_ids)
+            log.error(
+                "Batch %d/%d FAILED — all evaluators exhausted. Skipping samples: %s",
+                batch_idx + 1,
+                total_batches,
+                batch_ids,
+            )
 
     aggregates = {c: sum(v) / len(v) for c, v in all_scores.items() if v}
     if failed_sample_ids:
-        log.warning("%d/%d samples failed scoring: %s", len(failed_sample_ids), len(rows), failed_sample_ids)
+        log.warning(
+            "%d/%d samples failed scoring: %s", len(failed_sample_ids), len(rows), failed_sample_ids
+        )
     return aggregates, all_row_metrics, failed_sample_ids
 
 
@@ -395,7 +479,10 @@ def score_from_dump(*, dump_path: Path, output_dir: Path) -> Path:
 
     first = rows[0]
     output_dir.mkdir(parents=True, exist_ok=True)
-    result_path = output_dir / f"scored-{first.chunking_strategy}-{first.collection}-{time.strftime('%Y%m%d-%H%M%S')}.json"
+    result_path = (
+        output_dir
+        / f"scored-{first.chunking_strategy}-{first.collection}-{time.strftime('%Y%m%d-%H%M%S')}.json"
+    )
 
     payload = {
         "source_dump": str(dump_path),
@@ -422,30 +509,51 @@ def score_from_dump(*, dump_path: Path, output_dir: Path) -> Path:
 
 @observe(name="eval-run", as_type="span", capture_input=True, capture_output=False)
 def run_eval(
-    *, collection: str, chunking_strategy: str, dataset_path: Path,
-    provider: str, model: str, top_k: int, output_dir: Path,
+    *,
+    collection: str,
+    chunking_strategy: str,
+    dataset_path: Path,
+    provider: str,
+    model: str,
+    top_k: int,
+    output_dir: Path,
     fallback_chain: list[tuple[str, str]] | None = None,
 ) -> Path:
     """Run one eval sweep (retrieve + score) and persist artifacts."""
     samples = load_golden_dataset(dataset_path)
     retriever = HybridRetriever(collection_name=collection)
     dump_path = dump_retrieval_rows(
-        samples=samples, retriever=retriever, provider=provider, model=model,
-        collection=collection, chunking_strategy=chunking_strategy,
-        top_k=top_k, output_dir=output_dir, fallback_chain=fallback_chain,
+        samples=samples,
+        retriever=retriever,
+        provider=provider,
+        model=model,
+        collection=collection,
+        chunking_strategy=chunking_strategy,
+        top_k=top_k,
+        output_dir=output_dir,
+        fallback_chain=fallback_chain,
     )
     return score_from_dump(dump_path=dump_path, output_dir=output_dir)
 
 
 def run_from_settings(
-    *, collection: str, chunking_strategy: str, dataset_path: str | None = None,
-    provider: str | None = None, model: str | None = None, top_k: int | None = None,
-    output_dir: str | None = None, fallback_chain_csv: str | None = None,
+    *,
+    collection: str,
+    chunking_strategy: str,
+    dataset_path: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    top_k: int | None = None,
+    output_dir: str | None = None,
+    fallback_chain_csv: str | None = None,
 ) -> Path:
     """Resolve defaults from settings and execute one eval run."""
-    raw_csv = fallback_chain_csv if fallback_chain_csv is not None else settings.eval_fallback_chain_csv
+    raw_csv = (
+        fallback_chain_csv if fallback_chain_csv is not None else settings.eval_fallback_chain_csv
+    )
     return run_eval(
-        collection=collection, chunking_strategy=chunking_strategy,
+        collection=collection,
+        chunking_strategy=chunking_strategy,
         dataset_path=Path(dataset_path or settings.eval_dataset_path),
         provider=(provider or settings.eval_provider).strip(),
         model=(model or settings.eval_model).strip(),

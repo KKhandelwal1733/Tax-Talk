@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from inspect import isawaitable
 from threading import Lock
 from typing import Any
 
@@ -17,6 +18,11 @@ except ImportError:  # pragma: no cover
     genai = None
 
 try:
+    from openinference.instrumentation.google_genai import GoogleGenAIInstrumentor
+except ImportError:  # pragma: no cover
+    GoogleGenAIInstrumentor = None
+
+try:
     from langfuse import get_client
 except ImportError:  # pragma: no cover
     get_client = None
@@ -27,8 +33,14 @@ except ImportError:  # pragma: no cover
     Groq = None
 
 try:
-    from qdrant_client import QdrantClient
+    from groq import AsyncGroq
 except ImportError:  # pragma: no cover
+    AsyncGroq = None
+
+try:
+    from qdrant_client import AsyncQdrantClient, QdrantClient
+except ImportError:  # pragma: no cover
+    AsyncQdrantClient = None
     QdrantClient = None
 
 from tax_talk.core.config import settings
@@ -42,6 +54,9 @@ _logging_configured = False
 _qdrant_lock = Lock()
 _qdrant_client: Any | None = None
 
+_qdrant_async_lock = Lock()
+_qdrant_async_client: Any | None = None
+
 _langfuse_lock = Lock()
 _langfuse_client: Any | None = None
 
@@ -51,11 +66,20 @@ _cohere_client: Any | None = None
 _gemini_lock = Lock()
 _gemini_client: Any | None = None
 
+_gemini_otel_lock = Lock()
+_gemini_otel_instrumented = False
+
 _groq_lock = Lock()
 _groq_client: Any | None = None
 
+_groq_async_lock = Lock()
+_groq_async_client: Any | None = None
+
 _llm_strategy_lock = Lock()
 _llm_strategies: dict[str, LLMStrategy] = {}
+
+_llm_async_strategy_lock = Lock()
+_llm_async_strategies: dict[str, LLMStrategy] = {}
 
 
 def configure_logging() -> None:
@@ -105,6 +129,27 @@ def get_qdrant_client() -> Any:
             )
 
     return _qdrant_client
+
+
+def get_async_qdrant_client() -> Any:
+    """Return a singleton async Qdrant client for the current process."""
+    if AsyncQdrantClient is None:
+        raise RuntimeError(
+            "qdrant-client async support is unavailable; install qdrant-client to use async Qdrant integration."
+        )
+
+    global _qdrant_async_client
+    if _qdrant_async_client is not None:
+        return _qdrant_async_client
+
+    with _qdrant_async_lock:
+        if _qdrant_async_client is None:
+            _qdrant_async_client = AsyncQdrantClient(
+                url=settings.qdrant_url,
+                api_key=settings.qdrant_api_key or None,
+            )
+
+    return _qdrant_async_client
 
 
 def get_langfuse_client() -> Any:
@@ -172,6 +217,14 @@ def get_gemini_client() -> Any:
     if not settings.gemini_api_key:
         raise RuntimeError("GEMINI_API_KEY is not configured.")
 
+    global _gemini_otel_instrumented
+    if not _gemini_otel_instrumented:
+        with _gemini_otel_lock:
+            if not _gemini_otel_instrumented:
+                if GoogleGenAIInstrumentor is not None:
+                    GoogleGenAIInstrumentor().instrument()
+                _gemini_otel_instrumented = True
+
     global _gemini_client
     if _gemini_client is not None:
         return _gemini_client
@@ -200,6 +253,25 @@ def get_groq_client() -> Any:
             _groq_client = Groq(api_key=settings.groq_api_key)
 
     return _groq_client
+
+
+def get_async_groq_client() -> Any:
+    """Return a singleton async Groq client for the current process."""
+    if AsyncGroq is None:
+        raise RuntimeError("groq async SDK is not installed; install groq to enable async Groq.")
+
+    if not settings.groq_api_key:
+        raise RuntimeError("GROQ_API_KEY is not configured.")
+
+    global _groq_async_client
+    if _groq_async_client is not None:
+        return _groq_async_client
+
+    with _groq_async_lock:
+        if _groq_async_client is None:
+            _groq_async_client = AsyncGroq(api_key=settings.groq_api_key)
+
+    return _groq_async_client
 
 
 def get_llm_strategy(provider: str | None = None) -> LLMStrategy:
@@ -242,3 +314,85 @@ def get_llm_strategy(provider: str | None = None) -> LLMStrategy:
 
         _llm_strategies[provider_key] = strategy
         return strategy
+
+
+def get_llm_strategy_async(provider: str | None = None) -> LLMStrategy:
+    """Return a runtime-owned singleton strategy configured for async generation calls."""
+    log = get_logger(__name__)
+    configured_provider = (provider or "").strip()
+    provider_key = configured_provider.lower()
+
+    if not provider_key:
+        if settings.gemini_api_key:
+            provider_key = "gemini"
+        elif settings.groq_api_key:
+            provider_key = "groq"
+        else:
+            message = "No LLM provider available. Configure GEMINI_API_KEY or GROQ_API_KEY."
+            log.error(message)
+            raise RuntimeError(message)
+
+    strategy = _llm_async_strategies.get(provider_key)
+    if strategy is not None:
+        return strategy
+
+    with _llm_async_strategy_lock:
+        strategy = _llm_async_strategies.get(provider_key)
+        if strategy is not None:
+            return strategy
+
+        try:
+            if provider_key == "gemini":
+                strategy = GeminiLLMStrategy(get_gemini_client())
+            elif provider_key == "groq":
+                strategy = GroqLLMStrategy(
+                    get_groq_client(),
+                    async_client=get_async_groq_client(),
+                )
+            else:
+                raise RuntimeError(
+                    f"Unsupported LLM provider '{provider_key}'. Use 'gemini' or 'groq'."
+                )
+        except Exception as exc:
+            log.error("LLM provider '%s' is unavailable: %s", provider_key, exc)
+            raise
+
+        _llm_async_strategies[provider_key] = strategy
+        return strategy
+
+
+async def close_gemini_client() -> None:
+    """Close the shared Gemini client, including async transports when exposed by the SDK."""
+    global _gemini_client
+    client = _gemini_client
+    if client is None:
+        return
+
+    _gemini_client = None
+
+    aio_client = getattr(client, "aio", None)
+    if aio_client is not None:
+        for method_name in ("aclose", "close"):
+            method = getattr(aio_client, method_name, None)
+            if method is None:
+                continue
+            result = method()
+            if isawaitable(result):
+                await result
+            break
+
+    close_method = getattr(client, "close", None)
+    if close_method is not None:
+        result = close_method()
+        if isawaitable(result):
+            await result
+
+
+def flush_langfuse_client() -> None:
+    """Flush buffered Langfuse events before process shutdown."""
+    client = _langfuse_client
+    if client is None:
+        return
+    flush_method = getattr(client, "flush", None)
+    if flush_method is not None:
+        flush_method()

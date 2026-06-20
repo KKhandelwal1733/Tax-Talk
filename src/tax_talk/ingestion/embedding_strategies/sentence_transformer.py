@@ -1,4 +1,4 @@
-"""Local sentence-transformers embedding strategy."""
+"""Sentence-transformer model embedding strategy via HF Inference API."""
 
 from __future__ import annotations
 
@@ -20,46 +20,26 @@ log = get_logger(__name__)
 
 
 class LocalEmbeddingStrategy(EmbeddingStrategy):
-    """Runs sentence-transformers locally or through HF Inference API."""
+    """Runs sentence-transformer embeddings through HF Inference API."""
 
-    def __init__(self, model_name: str = settings.embedding_model_local) -> None:
-        self._mode = settings.embedding_local_mode.lower().strip()
+    def __init__(self, model_name: str = settings.embedding_model_sentence_transformer) -> None:
         self._usage_lock = Lock()
         self._embed_calls = 0
         self._texts_embedded = 0
         self._estimated_hf_requests = 0
+        from huggingface_hub import InferenceClient  # lazy import
 
-        if self._mode == "hf_inference":
-            from huggingface_hub import InferenceClient  # lazy import
-
-            if not settings.hf_token:
-                raise ValueError(
-                    "HF_TOKEN not set in .env - required for EMBEDDING_LOCAL_MODE=hf_inference."
-                )
-
-            log.info("Using HF Inference API for embedding model: %s", model_name)
-            self._client = InferenceClient(token=settings.hf_token)
-            self._model_name = model_name
-            self._dim = settings.embedding_dimensions
-            self._hf_request_limiter = Semaphore(max(1, settings.hf_max_concurrent_requests))
-            log.info("HF inference embedder ready. Expected dimensions: %d", self._dim)
-            return
-
-        if self._mode != "local":
+        if not settings.hf_token:
             raise ValueError(
-                "Invalid EMBEDDING_LOCAL_MODE: "
-                f"'{settings.embedding_local_mode}'. Choose: local | hf_inference"
+                "HF_TOKEN not set in .env - required for sentence_transformer embedding."
             )
 
-        from sentence_transformers import SentenceTransformer  # lazy import
-
-        log.info("Loading local embedding model: %s", model_name)
-        self._model = SentenceTransformer(model_name)
-        dim = self._model.get_embedding_dimension()
-        if dim is None:
-            raise ValueError(f"Embedding model '{model_name}' did not report output dimensions.")
-        self._dim = int(dim)
-        log.info("Model loaded. Dimensions: %d", self._dim)
+        log.info("Using HF Inference API for embedding model: %s", model_name)
+        self._client = InferenceClient(token=settings.hf_token)
+        self._model_name = model_name
+        self._dim = settings.embedding_dimensions
+        self._hf_request_limiter = Semaphore(max(1, settings.hf_max_concurrent_requests))
+        log.info("HF inference embedder ready. Expected dimensions: %d", self._dim)
 
     def _normalize_vectors(self, result: Any) -> list[list[float]]:
         if hasattr(result, "tolist"):
@@ -69,7 +49,7 @@ class LocalEmbeddingStrategy(EmbeddingStrategy):
             raise ValueError("HF inference returned empty embeddings payload.")
 
         first = result[0]
-        if isinstance(first, (int, float)):  # noqa: UP038
+        if isinstance(first, (int, float)): # noqa: UP038
             return [[float(v) for v in result]]
 
         vectors: list[list[float]] = []
@@ -103,61 +83,51 @@ class LocalEmbeddingStrategy(EmbeddingStrategy):
         batch_size = max(1, settings.embedding_batch_size)
         estimated_requests = ceil(len(safe_texts) / batch_size)
 
-        if self._mode == "hf_inference":
-            all_vectors: list[list[float]] = []
-            for i in range(0, len(safe_texts), batch_size):
-                batch = safe_texts[i : i + batch_size]
-                response: Any | None = None
-                last_error: Exception | None = None
-                max_attempts = max(1, settings.hf_retry_max_attempts)
-                for attempt in range(1, max_attempts + 1):
-                    try:
-                        with self._hf_request_limiter:
-                            response = self._client.feature_extraction(
-                                text=batch,
-                                model=self._model_name,
-                            )
-                        last_error = None
-                        break
-                    except Exception as exc:
-                        last_error = exc
-                        status_code = getattr(getattr(exc, "response", None), "status_code", None)
-                        retryable_status = {429, 500, 502, 503, 504}
-                        should_retry = status_code in retryable_status or status_code is None
-                        if not should_retry or attempt >= max_attempts:
-                            raise
-
-                        backoff = min(
-                            settings.hf_retry_max_delay_seconds,
-                            settings.hf_retry_initial_delay_seconds * (2 ** (attempt - 1)),
+        all_vectors: list[list[float]] = []
+        for i in range(0, len(safe_texts), batch_size):
+            batch = safe_texts[i : i + batch_size]
+            response: Any | None = None
+            last_error: Exception | None = None
+            max_attempts = max(1, settings.hf_retry_max_attempts)
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    with self._hf_request_limiter:
+                        response = self._client.feature_extraction(
+                            text=batch,
+                            model=self._model_name,
                         )
-                        log.warning(
-                            "HF embedding request failed (attempt %d/%d, status=%s). Retrying in %.1fs.",
-                            attempt,
-                            max_attempts,
-                            status_code,
-                            backoff,
-                        )
-                        time.sleep(backoff)
+                    last_error = None
+                    break
+                except Exception as exc:
+                    last_error = exc
+                    status_code = getattr(getattr(exc, "response", None), "status_code", None)
+                    retryable_status = {429, 500, 502, 503, 504}
+                    should_retry = status_code in retryable_status or status_code is None
+                    if not should_retry or attempt >= max_attempts:
+                        raise
 
-                if response is None:
-                    raise RuntimeError("HF embedding request returned no response") from last_error
-                vectors = self._normalize_vectors(response)
-                all_vectors.extend(vectors)
+                    backoff = min(
+                        settings.hf_retry_max_delay_seconds,
+                        settings.hf_retry_initial_delay_seconds * (2 ** (attempt - 1)),
+                    )
+                    log.warning(
+                        "HF embedding request failed (attempt %d/%d, status=%s). Retrying in %.1fs.",
+                        attempt,
+                        max_attempts,
+                        status_code,
+                        backoff,
+                    )
+                    time.sleep(backoff)
 
-            if all_vectors and len(all_vectors[0]) != self._dim:
-                raise ValueError(
-                    f"HF inference embedding dimensions mismatch: got {len(all_vectors[0])}, expected {self._dim}."
-                )
-        else:
-            vectors = self._model.encode(
-                safe_texts,
-                batch_size=batch_size,
-                show_progress_bar=len(texts) > 50,
-                normalize_embeddings=True,
-                convert_to_numpy=True,
+            if response is None:
+                raise RuntimeError("HF embedding request returned no response") from last_error
+            vectors = self._normalize_vectors(response)
+            all_vectors.extend(vectors)
+
+        if all_vectors and len(all_vectors[0]) != self._dim:
+            raise ValueError(
+                f"HF inference embedding dimensions mismatch: got {len(all_vectors[0])}, expected {self._dim}."
             )
-            all_vectors = vectors.tolist()
 
         with self._usage_lock:
             self._embed_calls += 1

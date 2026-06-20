@@ -21,7 +21,7 @@ from qdrant_client.models import (
 
 from langfuse import observe
 from tax_talk.core.config import settings
-from tax_talk.core.runtime import get_logger, get_qdrant_client
+from tax_talk.core.runtime import get_async_qdrant_client, get_logger, get_qdrant_client
 from tax_talk.models.ingestion import Chunk
 
 log = get_logger(__name__)
@@ -32,6 +32,7 @@ class QdrantStore:
 
     def __init__(self, collection_name: str | None = None) -> None:
         self._client = get_qdrant_client()
+        self._async_client = get_async_qdrant_client()
         chosen = (collection_name or settings.qdrant_collection).strip()
         if not chosen:
             raise ValueError("Qdrant collection name must not be blank")
@@ -101,6 +102,11 @@ class QdrantStore:
             raise ValueError(
                 f"Chunks ({len(chunks)}) and vectors ({len(vectors)}) must be the same length."
             )
+        if batch_size <= 0:
+            raise ValueError("batch_size must be > 0")
+
+        if len(chunks) > 1 and batch_size == 1:
+            raise ValueError("batch_size=1 is not allowed when upserting multiple chunks")
 
         total = 0
         for i in range(0, len(chunks), batch_size):
@@ -145,6 +151,30 @@ class QdrantStore:
             )
 
         response = self._client.query_points(
+            collection_name=self.collection,
+            query=query_vector,
+            limit=top_k,
+            with_payload=True,
+            query_filter=qdrant_filter,
+        )
+
+        points = getattr(response, "points", [])
+        return [{"score": hit.score, **(hit.payload or {})} for hit in points]
+
+    @observe(name="qdrant-search-async", capture_input=False, capture_output=False)
+    async def search_async(
+        self,
+        query_vector: list[float],
+        top_k: int = 10,
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict]:
+        qdrant_filter = None
+        if filters:
+            qdrant_filter = Filter(
+                must=[FieldCondition(key=k, match=MatchValue(value=v)) for k, v in filters.items()]
+            )
+
+        response = await self._async_client.query_points(
             collection_name=self.collection,
             query=query_vector,
             limit=top_k,

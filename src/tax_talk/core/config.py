@@ -31,16 +31,15 @@ class Settings(BaseSettings):
 
     # === Embeddings (pick ONE provider, must be consistent across ingestion + queries) ===
     # Options:
-    #   "sentence_transformer" → sentence-transformers BAAI/bge-base-en-v1.5 (free, no API, recommended)
+    #   "sentence_transformer" → HF Inference API using BAAI/bge-base-en-v1.5 (requires HF_TOKEN)
     #   "gemini"  → text-embedding-004 via Gemini API (free tier, needs GEMINI_API_KEY)
     #   "voyage"  → voyage-3 via Voyage AI (best for legal text, needs VOYAGE_API_KEY)
     embedding_provider: str = "sentence_transformer"
-    embedding_model_local: str = "BAAI/bge-base-en-v1.5"  # 270 MB, 768-dim, fast on CPU
-    embedding_local_mode: str = "local"  # local | hf_inference
+    embedding_model_sentence_transformer: str = "BAAI/bge-m3"
     embedding_model_gemini: str = "models/text-embedding-004"  # 768-dim, free 1500 RPD
     embedding_model_voyage: str = "voyage-3"  # 1024-dim, 50M free tokens
     embedding_batch_size: int = 64  # chunks per embedding batch (tune for memory)
-    embedding_dimensions: int = 768  # must match Qdrant collection — change if provider changes
+    embedding_dimensions: int = 1024  # must match Qdrant collection — change if provider changes
     ingestion_max_workers: int = 2  # source-level workers for embed/upsert phases
     hf_max_parallel_sources: int = 2  # hard cap for source-level concurrency in hf_inference mode
     hf_max_concurrent_requests: int = 2  # concurrent HF embedding requests across workers
@@ -98,10 +97,15 @@ class Settings(BaseSettings):
     # === App config ===
     env: str = "development"
     log_level: str = "INFO"
+    supabase_jwt_issuer: str = ""
+    supabase_jwt_audience: str = ""
 
     # === Cost controls (set on day one, never bypass) ===
     max_cost_per_request_usd: float = 0.10
     max_agent_loops: int = 5
+
+    # chat model
+    chat_model: str = "gemini-3.1-flash-lite"
 
     def model_post_init(self, __context):
         """Export Langfuse settings to os.environ so @observe decorators find them."""

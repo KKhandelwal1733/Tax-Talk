@@ -32,7 +32,7 @@ _STRATEGY_SPECS: dict[str, StrategySpec] = {
     "sentence_transformer": StrategySpec(
         display_name="sentence-transformers",
         factory=LocalEmbeddingStrategy,
-        model_setting_attr="embedding_model_local",
+        model_setting_attr="embedding_model_sentence_transformer",
     ),
     "gemini": StrategySpec(
         display_name="Gemini",
