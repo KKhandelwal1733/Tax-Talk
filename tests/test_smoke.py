@@ -5,7 +5,7 @@ from tax_talk.core.config import settings
 
 def test_config_loads() -> None:
     """Settings should load without error even with empty env."""
-    assert settings.env in {"development", "staging", "production"}
+    assert settings.env in {"development", "staging", "production", "test"}
     assert settings.max_cost_per_request_usd > 0
 
 
