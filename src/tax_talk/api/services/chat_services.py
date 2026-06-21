@@ -8,6 +8,7 @@ from contextlib import nullcontext
 from typing import Any
 
 from langfuse import observe, propagate_attributes
+
 from tax_talk.api.schemas.chat import ChatRequest, ChatResponse, ChatStreamEvent
 from tax_talk.api.services.prompt_builder import (
     build_chat_prompt,

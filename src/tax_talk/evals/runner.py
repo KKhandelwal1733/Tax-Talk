@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from langfuse import observe
 from ragas import EvaluationDataset, RunConfig, SingleTurnSample, evaluate
 from ragas.metrics import (
     AnswerCorrectness,
@@ -15,7 +16,6 @@ from ragas.metrics import (
     Faithfulness,
 )
 
-from langfuse import observe
 from tax_talk.core.config import settings
 from tax_talk.core.rate_limit import SlidingWindowRateLimiter
 from tax_talk.core.runtime import get_langfuse_client, get_llm_strategy, get_logger

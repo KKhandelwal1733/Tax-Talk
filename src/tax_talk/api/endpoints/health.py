@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
-
 from langfuse import observe
+
 from tax_talk.core.runtime import get_async_qdrant_client
 from tax_talk.models.api import HealthResponse
 

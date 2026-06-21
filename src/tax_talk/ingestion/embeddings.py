@@ -21,8 +21,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-
 from langfuse import observe
+
 from tax_talk.core.config import settings
 from tax_talk.core.runtime import get_logger
 from tax_talk.ingestion.embedding_strategies import EmbeddingStrategy, get_embedding_strategy

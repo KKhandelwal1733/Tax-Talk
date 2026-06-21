@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Literal
 
 from langfuse import observe
+
 from tax_talk.core.config import settings
 from tax_talk.core.runtime import get_langfuse_client, get_logger
 from tax_talk.ingestion.chunker import (

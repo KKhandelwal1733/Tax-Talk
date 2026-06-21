@@ -12,15 +12,18 @@ dependencies = [
     "groq>=0.9.0",
     "google-genai>=0.3.0",
     "cohere>=5.13.0",
+
     # Retrieval
     "qdrant-client>=1.12.0",
     "rank-bm25>=0.2.2",
     "huggingface-hub>=0.30.0",
+
     # API + async
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "httpx>=0.27.0",
     "sse-starlette>=2.1.3",
+
     # Data + config
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
@@ -28,10 +31,12 @@ dependencies = [
     "pypdf>=5.1.0",
     "beautifulsoup4>=4.12.0",
     "tqdm>=4.67.0",
+
     # Observability
     "langfuse>=2.55.0",
     "openinference-instrumentation-google-genai>=0.1.0",
-    #Auth
+
+    # Auth
     "pyjwt>=2.13.0",
     "cryptography>=48.0.0",
 ]
@@ -41,11 +46,17 @@ dev = [
     # Evals
     "ragas>=0.4.3,<0.5",
     "datasets>=2.19.0",
+
+    # Testing
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=6.0.0",
-    "ruff>=0.8.0",
+
+    # Linting + formatting (pinned — prevents CI vs local version mismatch)
+    "ruff==0.8.4",
     "mypy>=1.13.0",
+
+    # Dev utilities
     "ipython>=8.30.0",
     "jupyter>=1.1.0",
 ]
@@ -57,20 +68,29 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/tax_talk"]
 
+# ── Ruff ──────────────────────────────────────────────────────────────────────
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+src = ["src"]                        # tells ruff where source root is
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "RUF"]
 ignore = ["E501", "RUF001", "RUF003"]  # keep existing unicode content stable
 
+[tool.ruff.lint.isort]
+known-first-party = ["tax_talk"]     # tells ruff tax_talk is your code
+                                     # enforces blank line between third-party
+                                     # (langfuse, cohere) and first-party imports
+
+# ── Pytest ────────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
 
+# ── Mypy ──────────────────────────────────────────────────────────────────────
 [tool.mypy]
 python_version = "3.11"
-strict = false  # start lenient, tighten later
+strict = false          # start lenient, tighten later
 ignore_missing_imports = true
