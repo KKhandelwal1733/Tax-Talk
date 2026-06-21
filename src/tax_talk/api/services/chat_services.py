@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from contextlib import nullcontext
 from typing import Any
 
-from langfuse import observe
+from langfuse import observe, propagate_attributes
+
 from tax_talk.api.schemas.chat import ChatRequest, ChatResponse, ChatStreamEvent
 from tax_talk.api.services.prompt_builder import (
 	build_chat_prompt,
@@ -43,24 +45,25 @@ class ChatService:
 		Returns:
 			ChatResponse with final answer text and citations.
 		"""
-		_ = current_user
-		rewritten_query = await self._rewrite_query_async(query=request.query)
-		hits = await self._retriever.retrieve_async(
-			rewritten_query,
-			top_k=request.top_k,
-			dense_top_k=request.dense_top_k,
-			bm25_top_k=request.bm25_top_k,
-		)
-		prompt = build_chat_prompt(query=rewritten_query, hits=hits)
-		strategy = get_llm_strategy_async(self._provider)
-		answer = await strategy.generate_async(prompt=prompt, model=settings.chat_model)
-		faithfulness = await self._check_faithfulness_async(
-			question=request.query,
-			answer=answer,
-			hits=hits,
-		)
+		user_id = current_user.get("user_id") if current_user else None
+		with propagate_attributes(user_id=user_id) if user_id else nullcontext():
+			rewritten_query = await self._rewrite_query_async(query=request.query)
+			hits = await self._retriever.retrieve_async(
+				rewritten_query,
+				top_k=request.top_k,
+				dense_top_k=request.dense_top_k,
+				bm25_top_k=request.bm25_top_k,
+			)
+			prompt = build_chat_prompt(query=rewritten_query, hits=hits)
+			strategy = get_llm_strategy_async(self._provider)
+			answer = await strategy.generate_async(prompt=prompt, model=settings.chat_model)
+			faithfulness = await self._check_faithfulness_async(
+				question=request.query,
+				answer=answer,
+				hits=hits,
+			)
 
-		return ChatResponse(answer=answer, citations=hits[: request.top_k], faithfulness=faithfulness)
+			return ChatResponse(answer=answer, citations=hits[: request.top_k], faithfulness=faithfulness)
 
 	@observe(name="api-chat-stream", as_type="span", capture_input=True, capture_output=False)
 	async def stream_answer(
@@ -78,33 +81,34 @@ class ChatService:
 		Returns:
 			AsyncIterator over stream events.
 		"""
-		_ = current_user
-		rewritten_query = await self._rewrite_query_async(query=request.query)
-		hits = await self._retriever.retrieve_async(
-			rewritten_query,
-			top_k=request.top_k,
-			dense_top_k=request.dense_top_k,
-			bm25_top_k=request.bm25_top_k,
-		)
-		prompt = build_chat_prompt(query=rewritten_query, hits=hits)
-		strategy = get_llm_strategy_async(self._provider)
-		generated_tokens: list[str] = []
+		user_id = current_user.get("user_id") if current_user else None
+		with propagate_attributes(user_id=user_id) if user_id else nullcontext():
+			rewritten_query = await self._rewrite_query_async(query=request.query)
+			hits = await self._retriever.retrieve_async(
+				rewritten_query,
+				top_k=request.top_k,
+				dense_top_k=request.dense_top_k,
+				bm25_top_k=request.bm25_top_k,
+			)
+			prompt = build_chat_prompt(query=rewritten_query, hits=hits)
+			strategy = get_llm_strategy_async(self._provider)
+			generated_tokens: list[str] = []
 
-		async for token in strategy.generate_stream_async(prompt=prompt, model=settings.chat_model):
-			generated_tokens.append(token)
-			yield ChatStreamEvent(event="token", text=token)
+			async for token in strategy.generate_stream_async(prompt=prompt, model=settings.chat_model):
+				generated_tokens.append(token)
+				yield ChatStreamEvent(event="token", text=token)
 
-		yield ChatStreamEvent(event="done", citations=hits[: request.top_k])
+			yield ChatStreamEvent(event="done", citations=hits[: request.top_k])
 
-		faithfulness = await self._check_faithfulness_async(
-			question=request.query,
-			answer="".join(generated_tokens).strip(),
-			hits=hits,
-		)
-		if faithfulness is not None:
-			yield ChatStreamEvent(event="faithfulness", faithfulness=faithfulness)
+			faithfulness = await self._check_faithfulness_async(
+				question=request.query,
+				answer="".join(generated_tokens).strip(),
+				hits=hits,
+			)
+			if faithfulness is not None:
+				yield ChatStreamEvent(event="faithfulness", faithfulness=faithfulness)
 
-	@observe(name="api-query-rewrite", as_type="generation", capture_input=True, capture_output=False)
+	@observe(name="api-query-rewrite", as_type="generation", capture_input=False, capture_output=False)
 	async def _rewrite_query_async(self, *, query: str) -> str:
 		"""Rewrite user query for retrieval while preserving legal semantics.
 
@@ -128,7 +132,7 @@ class ChatService:
 	@observe(
 		name="api-faithfulness-check",
 		as_type="generation",
-		capture_input=True,
+		capture_input=False,
 		capture_output=False,
 	)
 	async def _check_faithfulness_async(
