@@ -17,15 +17,12 @@ def run_dense_search(
     filters: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
     """Run query embedding + dense vector search and shape ranked hits.
-    
+
     Note: Uses async embedding internally via asyncio.run().
     """
-    return asyncio.run(run_dense_search_async(
-        store=store,
-        query=query,
-        top_k=top_k,
-        filters=filters
-    ))
+    return asyncio.run(
+        run_dense_search_async(store=store, query=query, top_k=top_k, filters=filters)
+    )
 
 
 async def run_dense_search_async(

@@ -6,8 +6,8 @@ Creates the Qdrant collection (if needed) and upserts/searches chunks.
 
 from __future__ import annotations
 
-import uuid
 import time
+import uuid
 from typing import Any
 
 from qdrant_client.models import (
@@ -135,7 +135,9 @@ class QdrantStore:
                     break  # Success, break out of the retry loop
                 except Exception as e:
                     if attempt < retries - 1:
-                        log.warning("Upsert batch failed, retrying in 2 seconds... Error: %s", str(e))
+                        log.warning(
+                            "Upsert batch failed, retrying in 2 seconds... Error: %s", str(e)
+                        )
                         time.sleep(2)
                     else:
                         log.error("Upsert batch failed after %d attempts.", retries)

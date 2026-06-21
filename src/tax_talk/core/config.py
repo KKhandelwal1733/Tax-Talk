@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     max_cost_per_request_usd: float = 0.10
     max_agent_loops: int = 5
 
-    #chat model
+    # chat model
     chat_model: str = "gemini-3.1-flash-lite"
 
     # === Optional runtime faithfulness check ===
@@ -115,7 +115,7 @@ class Settings(BaseSettings):
 
     def model_post_init(self, __context):
         """Export Langfuse settings to os.environ so @observe decorators find them.
-        
+
         Also validate that Supabase auth config is complete if SUPABASE_URL is set.
         """
         if self.langfuse_public_key:
@@ -124,7 +124,7 @@ class Settings(BaseSettings):
             os.environ["LANGFUSE_SECRET_KEY"] = self.langfuse_secret_key
         if self.langfuse_host:
             os.environ["LANGFUSE_HOST"] = self.langfuse_host
-        
+
         # Enforce strict Supabase JWT auth config
         if self.supabase_url.strip():
             if not self.supabase_jwt_issuer.strip():

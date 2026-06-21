@@ -222,6 +222,7 @@ def run_ingestion(
             chunks = read_chunks_jsonl(chunks_path)
 
         if should_embed:
+
             async def embed_batches() -> list[list[float]]:
                 """Embed all chunks asynchronously in batches."""
                 vectors: list[list[float]] = []
@@ -306,7 +307,8 @@ def run_ingestion(
     else:
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ingest") as executor:
             futures = {
-                executor.submit(process_source, source_key): source_key for source_key in active_source_keys
+                executor.submit(process_source, source_key): source_key
+                for source_key in active_source_keys
             }
             for future in as_completed(futures):
                 source_key = futures[future]

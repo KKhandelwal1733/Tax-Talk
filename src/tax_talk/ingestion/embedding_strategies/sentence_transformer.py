@@ -31,7 +31,9 @@ class HFEmbeddingStrategy(EmbeddingStrategy):
         from huggingface_hub import AsyncInferenceClient, InferenceClient  # lazy import
 
         if not settings.hf_token:
-            raise ValueError("HF_TOKEN not set in .env - required for sentence_transformer embedding.")
+            raise ValueError(
+                "HF_TOKEN not set in .env - required for sentence_transformer embedding."
+            )
 
         log.info("Using HF Inference API for embedding model: %s", model_name)
         self._client = InferenceClient(token=settings.hf_token)
@@ -49,7 +51,7 @@ class HFEmbeddingStrategy(EmbeddingStrategy):
             raise ValueError("HF inference returned empty embeddings payload.")
 
         first = result[0]
-        if isinstance(first, (int, float)): #noqa UP038
+        if isinstance(first, (int, float)):  # noqa UP038
             return [[float(v) for v in result]]
 
         vectors: list[list[float]] = []
@@ -77,10 +79,10 @@ class HFEmbeddingStrategy(EmbeddingStrategy):
                 coerced += 1
 
             safe_texts.append(value if value else " ")
-        
+
         if coerced:
             log.warning("Coerced %d non-string embedding inputs.", coerced)
-        
+
         return safe_texts, coerced
 
     def embed(self, texts: list[str]) -> list[list[float]]:

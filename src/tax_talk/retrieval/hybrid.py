@@ -90,7 +90,9 @@ class HybridRetriever:
 
         return self._cohere_rerank(query=query, candidates=fused, top_k=top_k)
 
-    @observe(name="retrieval-hybrid-async", as_type="retriever", capture_input=True, capture_output=True)
+    @observe(
+        name="retrieval-hybrid-async", as_type="retriever", capture_input=True, capture_output=True
+    )
     async def retrieve_async(
         self,
         query: str,
@@ -129,7 +131,9 @@ class HybridRetriever:
         if not self._rerank_enabled:
             return fused[:top_k]
 
-        return await asyncio.to_thread(self._cohere_rerank, query=query, candidates=fused, top_k=top_k)
+        return await asyncio.to_thread(
+            self._cohere_rerank, query=query, candidates=fused, top_k=top_k
+        )
 
     @observe(
         name="retrieval-cohere-rerank",

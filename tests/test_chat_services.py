@@ -28,7 +28,9 @@ class DummyRetriever:
         _ = dense_top_k
         _ = bm25_top_k
         self.last_query = query
-        return [{"chunk_id": "c-1", "text": "section text", "source_key": "cgst", "section_title": "s1"}]
+        return [
+            {"chunk_id": "c-1", "text": "section text", "source_key": "cgst", "section_title": "s1"}
+        ]
 
 
 class DummyLLMStrategy:

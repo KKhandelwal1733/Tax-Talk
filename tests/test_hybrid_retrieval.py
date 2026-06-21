@@ -57,7 +57,9 @@ def _stub_dense_search(monkeypatch: pytest.MonkeyPatch) -> None:
         return store.search(query_vector=[0.0], top_k=top_k, filters=filters)
 
     monkeypatch.setattr("tax_talk.retrieval.hybrid.run_dense_search", _fake_run_dense_search)
-    monkeypatch.setattr("tax_talk.retrieval.hybrid.run_dense_search_async", _fake_run_dense_search_async)
+    monkeypatch.setattr(
+        "tax_talk.retrieval.hybrid.run_dense_search_async", _fake_run_dense_search_async
+    )
 
 
 def test_tokenize_keeps_identifiers_and_numbers() -> None:
