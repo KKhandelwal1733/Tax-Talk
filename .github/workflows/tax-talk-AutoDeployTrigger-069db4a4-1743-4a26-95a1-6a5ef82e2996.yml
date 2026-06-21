@@ -6,11 +6,11 @@ on:
     workflows: ["CI"]
     types:
       - completed
-    branches: 
+    branches:
       - main
 
   # Allows you to manually trigger a deployment from the GitHub Actions tab
-  workflow_dispatch:      
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
