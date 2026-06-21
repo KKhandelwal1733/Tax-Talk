@@ -1,28 +1,29 @@
 name: Trigger auto deployment for tax-talk
 
-# When this action will be executed
 on:
-  # Automatically trigger it when detected changes in repo
-  push:
+  # Waits for the 'CI' workflow to finish before triggering
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
     branches: 
-      [ main ]
-    paths:
-    - '**'
-    - '.github/workflows/tax-talk-AutoDeployTrigger-069db4a4-1743-4a26-95a1-6a5ef82e2996.yml'
+      - main
 
-  # Allow manual trigger 
+  # Allows you to manually trigger a deployment from the GitHub Actions tab
   workflow_dispatch:      
 
 jobs:
   build-and-deploy:
+    # CRITICAL: Only proceed if the CI tests passed, OR if triggered manually
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     permissions: 
-      id-token: write #This is required for requesting the OIDC JWT Token
-      contents: read #Required when GH token is used to authenticate with private repo
+      id-token: write 
+      contents: read 
 
     steps:
       - name: Checkout to the branch
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Azure Login
         uses: azure/login@v2
@@ -35,15 +36,9 @@ jobs:
         uses: azure/container-apps-deploy-action@v2
         with:
           appSourcePath: ${{ github.workspace }}
-          _dockerfilePathKey_: _dockerfilePath_
-          _targetLabelKey_: _targetLabel_
           registryUrl: taxtalk-b5a6hqbaare6e5e6.azurecr.io
           registryUsername: ${{ secrets.TAXTALK_REGISTRY_USERNAME }}
           registryPassword: ${{ secrets.TAXTALK_REGISTRY_PASSWORD }}
           containerAppName: tax-talk
           resourceGroup: tax-talk-rg
           imageToBuild: taxtalk-b5a6hqbaare6e5e6.azurecr.io/tax-talk:${{ github.sha }}
-          _buildArgumentsKey_: |
-            _buildArgumentsValues_
-
-
