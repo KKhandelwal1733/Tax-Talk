@@ -124,6 +124,8 @@ class Settings(BaseSettings):
             os.environ["LANGFUSE_SECRET_KEY"] = self.langfuse_secret_key
         if self.langfuse_host:
             os.environ["LANGFUSE_HOST"] = self.langfuse_host
+        if self.env:
+            os.environ["LANGFUSE_TRACING_ENVIRONMENT"] = self.env
 
         # Enforce strict Supabase JWT auth config
         if self.supabase_url.strip():
