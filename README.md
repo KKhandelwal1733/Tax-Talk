@@ -49,7 +49,7 @@ Architecture diagram: see [ARCHITECTURE.md](./ARCHITECTURE.md).
 | Observability | Langfuse Cloud | Free tier, captures all traces and costs |
 | API | FastAPI + SSE streaming | Production-standard |
 | Eval framework | RAGAS + custom LLM-as-judge | Faithfulness, context relevance, citation accuracy |
-| Hosting | Azure VM (B1S, Central India) + Streamlit frontend | Free via Azure for Students |
+| Hosting | Azure Container Apps + Streamlit frontend | Free via Azure for Students |
 
 ### Embedding execution
 
@@ -80,7 +80,7 @@ Current snapshot (will update weekly):
 
 ## Live demo
 
-[domain-oracle.yourname.me](https://domain-oracle.yourname.me) — Not yet.
+[tax-talk.kkhandelwal.me](https://api.tax-talk.kkhandelwal.me/docs).
 
 ## Local development
 
