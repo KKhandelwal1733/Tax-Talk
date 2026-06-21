@@ -100,7 +100,7 @@ def _embedding_model_name() -> str:
         return settings.embedding_model_gemini
     if provider == "voyage":
         return settings.embedding_model_voyage
-    return settings.embedding_model_local
+    return settings.embedding_model_sentence_transformer
 
 
 @observe(name="ingestion-run")

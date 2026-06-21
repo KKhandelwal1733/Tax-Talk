@@ -126,6 +126,7 @@ def get_qdrant_client() -> Any:
             _qdrant_client = QdrantClient(
                 url=settings.qdrant_url,
                 api_key=settings.qdrant_api_key or None,
+                timeout=60
             )
 
     return _qdrant_client

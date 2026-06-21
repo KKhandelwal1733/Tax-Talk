@@ -7,6 +7,7 @@ Creates the Qdrant collection (if needed) and upserts/searches chunks.
 from __future__ import annotations
 
 import uuid
+import time
 from typing import Any
 
 from qdrant_client.models import (
@@ -96,7 +97,7 @@ class QdrantStore:
         self,
         chunks: list[Chunk],
         vectors: list[list[float]],
-        batch_size: int = 100,
+        batch_size: int = 10,  # [FIX 1] Lowered default batch size from 20 to 10
     ) -> int:
         if len(chunks) != len(vectors):
             raise ValueError(
@@ -122,11 +123,23 @@ class QdrantStore:
                 for chunk, vector in zip(batch_chunks, batch_vectors, strict=False)
             ]
 
-            self._client.upsert(
-                collection_name=self.collection,
-                points=points,
-                wait=True,
-            )
+            # [FIX 2 & 3] Added basic retry logic and changed wait=True
+            retries = 3
+            for attempt in range(retries):
+                try:
+                    self._client.upsert(
+                        collection_name=self.collection,
+                        points=points,
+                        wait=True,  # [FIX 2] Changed from False to True to enforce backpressure
+                    )
+                    break  # Success, break out of the retry loop
+                except Exception as e:
+                    if attempt < retries - 1:
+                        log.warning("Upsert batch failed, retrying in 2 seconds... Error: %s", str(e))
+                        time.sleep(2)
+                    else:
+                        log.error("Upsert batch failed after %d attempts.", retries)
+                        raise e
 
             total += len(points)
             log.info("Upserted batch %d-%d (%d total so far)", i + 1, i + len(batch_chunks), total)
