@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from tax_talk.api.endpoints.chat import router as chat_router
 from tax_talk.api.endpoints.health import router as health_router
@@ -42,6 +43,17 @@ def create_app() -> FastAPI:
     """Build and configure the FastAPI application."""
     app = FastAPI(title="tax-talk API", version="0.3.2", lifespan=lifespan)
     app.add_middleware(ObservabilityMiddleware)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "https://tax-talk.kkhandelwal.me",
+            "https://tax-talk-app.streamlit.app",
+            "http://localhost:8501",
+        ],
+        allow_methods=["GET", "POST", "OPTIONS"],  # add OPTIONS
+        allow_headers=["*"],
+        allow_credentials=False,
+    )
     app.include_router(health_router)
     app.include_router(chat_router)
     return app
